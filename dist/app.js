@@ -1,5 +1,6 @@
 'use strict';
 const {symbols,route,createGame}=FruitGame;
+const bonusNames={gift:'幸运送灯',train:'火车连奖',bigTriple:'大三元',smallTriple:'小三元',jackpot:'累积彩金'};
 const game=createGame(), $=id=>document.getElementById(id);
 const positions=[];
 for(let x=1;x<=9;x++)positions.push([x,1]);
@@ -44,6 +45,7 @@ function update(){
   });
   $('total').textContent=String(state.total).padStart(3,'0');
   $('credit').textContent=String(state.credit).padStart(6,'0');
+  $('jackpot').textContent=state.jackpot.toLocaleString('zh-CN');
   $('win').textContent=String(state.win).padStart(3,'0');
   document.querySelectorAll('[data-step]').forEach(button=>button.disabled=state.busy);
   $('clear').disabled=state.busy||state.total===0;$('subtract').disabled=state.busy;
@@ -81,7 +83,7 @@ function animate(){
   let target;
   try{target=game.start()}catch{status.textContent='无法取得安全随机数，未扣分，请重试';return}
   if(target===null)return;
-  tiles.forEach(t=>t.classList.remove('bonus-hit','train-head'));$('lucky-lamp').classList.remove('lit');$('lucky-lamp').textContent='LUCKY LIGHT / 幸运灯';$('round-detail').textContent='';$('guess-number').textContent='—';
+  tiles.forEach(t=>t.classList.remove('bonus-hit','train-head'));$('jackpot-display').classList.remove('jackpot-won');$('lucky-lamp').classList.remove('lit');$('lucky-lamp').textContent='LUCKY LIGHT / 幸运灯';$('round-detail').textContent='';$('guess-number').textContent='—';
   const total=game.snapshot().total;update();status.textContent=`已扣 ${total} 分 · 跑灯中`;
   const distance=72+(target-current+24)%24;let tick=0;
   function frame(){
@@ -97,17 +99,28 @@ function animate(){
 function finishRound(){
   const result=game.settle();if(!result)return;
   update();
-  status.textContent=`${result.bonusType==='train'?'火车连奖':result.bonusType==='gift'?'幸运送灯':symbols[result.symbol][0]+' ×'+result.multiplier} · ${result.win?'得 '+result.win+' 分':'未中奖'}`;
+  status.textContent=`${bonusNames[result.bonusType]||symbols[result.symbol][0]+' ×'+result.multiplier} · ${result.win?'得 '+result.win+' 分':'未中奖'}`;
   if(game.snapshot().credit===0)status.textContent+=' · 积分已用完';
   const extras=result.awards.map(a=>{const [i,m]=route[a.index];return `${a.index+1}号 ${symbols[i][0]} ×${m}：${a.win} 分`}).join('；');
-  $('round-detail').textContent=`主灯 ${result.baseWin} 分${extras?'；赠灯 '+result.bonusWin+' 分（'+extras+'）':''}。${result.win?'得分已加入余额。':''}`;
+  $('round-detail').textContent=`主灯 ${result.baseWin} 分${extras?'；'+bonusNames[result.bonusType]+' '+result.bonusWin+' 分（'+extras+'）':''}${result.jackpotWin?'；累积彩金 '+result.jackpotWin+' 分，彩金池重置为 1000 分':''}。${result.win?'得分已加入余额。':''}`;
   if(result.win)tone(700,.25);
 }
 function showBonus(){
   const bonus=game.bonusPreview();
   if(!bonus?.type){finishRound();return}
-  const train=bonus.type==='train';
-  $('lucky-lamp').classList.add('lit');$('lucky-lamp').textContent=train?'♣ 火车连奖 · 四格':'♣ 幸运送灯 · 三格';
+  const train=bonus.type==='train',triple=['bigTriple','smallTriple'].includes(bonus.type);
+  $('lucky-lamp').classList.add('lit');$('lucky-lamp').textContent='♣ '+bonusNames[bonus.type];
+  if(bonus.type==='jackpot'){
+    const amount=game.snapshot().jackpot;
+    $('jackpot-display').classList.add('jackpot-won');
+    status.textContent=`累积彩金 · ${amount} 分`;
+    tone(880,.4);setTimeout(finishRound,1600);return;
+  }
+  if(triple){
+    status.textContent=bonus.type==='bigTriple'?'大三元 · 双七 / 星星 / 西瓜':'小三元 · 铃铛 / 木瓜 / 橙子';
+    bonus.indices.forEach(i=>tiles[i].classList.add('bonus-hit'));
+    tone(740,.4);setTimeout(finishRound,1600);return;
+  }
   status.textContent=train?'火车进站 · 免费点亮四格':'幸运灯亮起 · 免费赠送三格';
   tone(train?220:660,.2);
   let n=0;

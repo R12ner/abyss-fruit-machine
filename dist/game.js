@@ -18,21 +18,32 @@
     return value[0]%size;
   }
   const randomIndex=provider=>randomInt(24,provider);
+  const triples=Object.freeze({
+    bigTriple:Object.freeze([1,2,3].map(symbol=>route.findIndex(([s,m])=>s===symbol&&m===symbols[symbol][1]))),
+    smallTriple:Object.freeze([4,5,6].map(symbol=>route.findIndex(([s,m])=>s===symbol&&m===symbols[symbol][1])))
+  });
   function drawBonus(draw=randomInt){
-    if(draw(12)!==0)return {type:null,indices:[]};
-    if(draw(2)===0){
-      const pool=route.map((_,i)=>i), indices=[];
+    // Keep gift/train at 1/24 each; add triples at 1/60 each and jackpot at 1/120.
+    const ticket=draw(120);
+    if(ticket>=15)return {type:null,indices:[]};
+    if(ticket<5){
+      const pool=route.map((_,i)=>i),indices=[];
       for(let n=0;n<3;n++)indices.push(pool.splice(draw(pool.length),1)[0]);
       return {type:'gift',indices};
     }
-    const first=draw(24);
-    return {type:'train',indices:Array.from({length:4},(_,i)=>(first+i)%24)};
+    if(ticket<10){
+      const first=draw(24);
+      return {type:'train',indices:Array.from({length:4},(_,i)=>(first+i)%24)};
+    }
+    if(ticket<12)return {type:'bigTriple',indices:[...triples.bigTriple]};
+    if(ticket<14)return {type:'smallTriple',indices:[...triples.smallTriple]};
+    return {type:'jackpot',indices:[]};
   }
   function createGame(){
-    let credit=1000,bets=Array(8).fill(0),previous=null,pending=null,win=0,risk=0,guesses=0,gamble=null;
+    let credit=1000,bets=Array(8).fill(0),previous=null,pending=null,win=0,risk=0,guesses=0,gamble=null,jackpot=1000;
     const busy=()=>pending!==null||gamble!==null;
     return {
-      snapshot:()=>({credit,bets:[...bets],previous:previous&&[...previous],busy:busy(),win,risk,guesses,total:sum(bets)}),
+      snapshot:()=>({credit,bets:[...bets],previous:previous&&[...previous],busy:busy(),win,risk,guesses,jackpot,total:sum(bets)}),
       adjust(index,delta){
         if(busy()||!Number.isInteger(index)||index<0||index>7||!Number.isInteger(delta))return false;
         const next=Math.max(0,bets[index]+delta);
@@ -45,12 +56,13 @@
         if(busy()||sum(bets)===0||sum(bets)>credit)return null;
         const index=choose(), bonus=bonusChooser();
         if(!Number.isInteger(index)||index<0||index>=24)throw new Error('Invalid random result');
-        const count=bonus?.type==='gift'?3:bonus?.type==='train'?4:bonus?.type===null?0:-1;
+        const count=['gift','bigTriple','smallTriple'].includes(bonus?.type)?3:bonus?.type==='train'?4:(bonus?.type===null||bonus?.type==='jackpot')?0:-1;
         if(!Array.isArray(bonus?.indices)||bonus.indices.length!==count||
           !bonus.indices.every(i=>Number.isInteger(i)&&i>=0&&i<24)||
           new Set(bonus.indices).size!==count)throw new Error('Invalid bonus result');
+        if(triples[bonus.type]&&!bonus.indices.every((v,i)=>v===triples[bonus.type][i]))throw new Error('Invalid triple');
         previous=[...bets];pending={index,bets:[...bets],bonus:{type:bonus.type,indices:[...bonus.indices]}};
-        credit-=sum(bets);win=0;risk=0;guesses=0;return index;
+        credit-=sum(bets);jackpot+=Math.floor(sum(bets)/10);win=0;risk=0;guesses=0;return index;
       },
       bonusPreview(){return pending?{type:pending.bonus.type,indices:[...pending.bonus.indices]}:null},
       settle(){
@@ -60,8 +72,11 @@
         const awards=pending.bonus.indices.map(index=>{
           const [s,m]=route[index];return {index,win:pending.bets[s]*m};
         });
-        const bonusWin=awards.reduce((a,b)=>a+b.win,0);win=baseWin+bonusWin;credit+=win;risk=win;
-        const result={index:pending.index,symbol,multiplier,stake:pending.bets[symbol],win,baseWin,bonusWin,bonusType:pending.bonus.type,awards};
+        const lightWin=awards.reduce((a,b)=>a+b.win,0);
+        const jackpotWin=pending.bonus.type==='jackpot'?jackpot:0;
+        if(jackpotWin)jackpot=1000;
+        const bonusWin=lightWin+jackpotWin;win=baseWin+bonusWin;credit+=win;risk=win;
+        const result={index:pending.index,symbol,multiplier,stake:pending.bets[symbol],win,baseWin,bonusWin,jackpotWin,bonusType:pending.bonus.type,awards};
         pending=null;bets.fill(0);return result;
       },
       collect(){if(busy()||risk===0)return false;risk=0;return true},
@@ -80,7 +95,7 @@
       }
     };
   }
-  const api={symbols,route,randomInt,randomIndex,drawBonus,createGame};
+  const api={symbols,route,randomInt,randomIndex,drawBonus,triples,createGame};
   if(typeof module!=='undefined'&&module.exports)module.exports=api;
   else root.FruitGame=api;
 })(globalThis);

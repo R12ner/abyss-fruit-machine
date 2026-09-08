@@ -1,0 +1,50 @@
+const assert=require('node:assert/strict');
+const {createGame,drawBonus,triples,route}=require('../dist/game.js');
+const noBonus=()=>({type:null,indices:[]}),jackpot=()=>({type:'jackpot',indices:[]});
+const frequencies={};
+for(let ticket=0;ticket<120;ticket++){
+ let first=true;
+ const bonus=drawBonus(n=>{if(first){first=false;assert.equal(n,120);return ticket}return 0});
+ frequencies[String(bonus.type)]=(frequencies[String(bonus.type)]||0)+1;
+ if(triples[bonus.type])assert.deepEqual(bonus.indices,triples[bonus.type]);
+}
+assert.deepEqual(frequencies,{gift:5,train:5,bigTriple:2,smallTriple:2,jackpot:1,null:105});
+assert.deepEqual(triples.bigTriple.map(i=>route[i]),[[1,40],[2,30],[3,20]]);
+assert.deepEqual(triples.smallTriple.map(i=>route[i]),[[4,20],[5,15],[6,10]]);
+for(const type of ['bigTriple','smallTriple']){
+ const g=createGame(),indices=triples[type];
+ indices.forEach((index,i)=>g.adjust(route[index][0],i+1));
+ g.start(()=>indices[0],()=>({type,indices:[...indices]}));
+ assert.equal(g.snapshot().credit,994);
+ const expected=indices.reduce((v,index,i)=>v+(i+1)*route[index][1],0);
+ const result=g.settle();
+ assert.equal(result.bonusWin,expected);assert.equal(result.baseWin,route[indices[0]][1]);
+ assert.equal(g.snapshot().credit,994+expected+result.baseWin);assert.equal(g.settle(),null);
+ const partial=createGame();partial.adjust(route[indices[1]][0],10);
+ partial.start(()=>4,()=>({type,indices:[...indices]}));
+ assert.equal(partial.settle().bonusWin,10*route[indices[1]][1]);
+ const miss=createGame();miss.adjust(0,1);miss.start(()=>6,()=>({type,indices:[...indices]}));
+ assert.equal(miss.settle().win,0);
+}
+const g=createGame();assert.equal(g.snapshot().jackpot,1000);
+g.adjust(7,9);g.start(()=>4,noBonus);g.settle();assert.equal(g.snapshot().jackpot,1000);
+g.adjust(7,19);g.start(()=>4,noBonus);assert.equal(g.snapshot().jackpot,1001);g.settle();
+g.adjust(7,25);g.start(()=>4,jackpot);
+assert.equal(g.snapshot().jackpot,1003);assert.equal(g.snapshot().credit,947);
+assert.equal(g.start(()=>4,jackpot),null);assert.equal(g.snapshot().jackpot,1003);
+assert.equal(g.startGamble('big'),false);
+const r=g.settle();assert.equal(r.jackpotWin,1003);assert.equal(r.baseWin,0);
+assert.equal(g.snapshot().credit,1950);assert.equal(g.snapshot().risk,1003);
+assert.equal(g.snapshot().jackpot,1000);assert.equal(g.settle(),null);
+g.startGamble('small',()=>13);g.settleGamble();
+assert.equal(g.snapshot().credit,947);assert.equal(g.snapshot().jackpot,1000);
+const both=createGame();both.adjust(7,10);both.start(()=>6,jackpot);
+const b=both.settle();assert.equal(b.baseWin,50);assert.equal(b.jackpotWin,1001);
+assert.equal(b.win,1051);assert.equal(both.snapshot().credit,2041);
+assert.equal(createGame().snapshot().jackpot,1000);
+const failure=createGame();failure.adjust(7,10);
+assert.throws(()=>failure.start(()=>6,()=>{throw Error('rng unavailable')}));
+assert.equal(failure.snapshot().credit,1000);assert.equal(failure.snapshot().jackpot,1000);
+assert.throws(()=>failure.start(()=>6,()=>({type:'bigTriple',indices:[0,1,2]})));
+assert.equal(failure.snapshot().credit,1000);assert.equal(failure.snapshot().jackpot,1000);
+console.log('Passed: all 120 bonus tickets, triple full/partial/missed bets, jackpot accrual, atomic payout/reset, gamble loss and failure isolation.');

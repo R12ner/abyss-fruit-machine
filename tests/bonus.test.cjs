@@ -2,9 +2,9 @@ const assert=require('node:assert/strict');
 const {createGame,drawBonus,route}=require('../dist/game.js');
 const none=()=>({type:null,indices:[]});
 function sequence(values){let i=0;return max=>{const value=values[i++];assert.ok(value>=0&&value<max);return value}}
-assert.deepEqual(drawBonus(sequence([1])),{type:null,indices:[]});
-assert.deepEqual(drawBonus(sequence([0,0,0,0,0])),{type:'gift',indices:[0,1,2]});
-assert.deepEqual(drawBonus(sequence([0,1,23])),{type:'train',indices:[23,0,1,2]});
+assert.deepEqual(drawBonus(sequence([15])),{type:null,indices:[]});
+assert.deepEqual(drawBonus(sequence([0,0,0,0])),{type:'gift',indices:[0,1,2]});
+assert.deepEqual(drawBonus(sequence([5,23])),{type:'train',indices:[23,0,1,2]});
 for(const type of ['gift','train']){
  const g=createGame();for(let i=0;i<8;i++)g.adjust(i,10);
  const indices=type==='gift'?[4,6,8]:[23,0,1,2];
