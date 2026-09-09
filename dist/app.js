@@ -16,6 +16,33 @@ route.forEach(([i,m],n)=>{
 });
 let step=1,subtract=false,sound=false,audio,current=0;
 const status=$('status'),start=$('start'),bets=$('bets'),dialog=$('rules-dialog');
+const segmentMap=['abcdef','bc','abdeg','abcdg','bcfg','acdfg','acdefg','abc','abcdefg','abcdfg'];
+function setLed(id,value,digits=6){
+  const node=$(id),text=String(value).padStart(digits,'0');
+  node.setAttribute('aria-label',String(value));
+  node.innerHTML=[...text].map(char=>`<span class="led-digit" aria-hidden="true">${[...'abcdefg'].map(segment=>`<i class="seg seg-${segment}${(segmentMap[Number(char)]||'').includes(segment)?' on':''}"></i>`).join('')}</span>`).join('');
+}
+let coinTimer;
+function ejectCoins(amount){
+  clearTimeout(coinTimer);const stream=$('coin-stream');stream.replaceChildren();
+  $('payout-label').textContent=`$${amount.toLocaleString('zh-CN')} USD`;
+  for(let i=0;i<Math.min(12,amount);i++){
+    const coin=document.createElement('img');coin.src='assets/coin.png';coin.alt='';
+    coin.style.setProperty('--coin-delay',`${i*.12}s`);coin.style.setProperty('--coin-x',`${(i%5-2)*12}px`);stream.append(coin);
+  }
+  tone(750,.2);coinTimer=setTimeout(()=>stream.replaceChildren(),3000);
+}
+const engravings={subtract:'减注',repeat:'重押',clear:'清空',start:'启动', 'guess-small':'小 1–7','guess-big':'大 8–14',collect:'收分'};
+for(const [id,label] of Object.entries(engravings)){
+  const button=$(id),mark=document.createElement('span');mark.className='button-engraving';mark.textContent=label;button.append(mark);
+}
+document.querySelectorAll('[data-step]').forEach(button=>{const mark=document.createElement('span');mark.className='button-engraving';mark.textContent=`×${button.dataset.step}`;button.append(mark)});
+$('insert-coin').onclick=()=>{
+  if(!game.insertCoin(step)){status.textContent='钱包余额不足或机台运行中';return}
+  $('insert-coin').classList.remove('inserting');void $('insert-coin').offsetWidth;$('insert-coin').classList.add('inserting');
+  update();status.textContent=`已投币 ${step} USD`;tone(500,.12);
+};
+$('cash-out').onclick=()=>{const amount=game.cashOut();if(amount){update();clearAward();ejectCoins(amount);status.textContent=`已退币 ${amount} USD 至钱包`}};
 function tone(freq,duration){
   if(!sound)return;
   try{audio??=new(window.AudioContext||window.webkitAudioContext)();audio.resume();
@@ -26,7 +53,7 @@ function tone(freq,duration){
 }
 function adjust(i,remove){
   if(game.snapshot().busy)return;
-  if(!game.adjust(i,remove?-step:step)){status.textContent='无法加注：单门最多 99 分，总押不得超过余额';return}
+  if(!game.adjust(i,remove?-step:step)){status.textContent='无法加注：单门最多 99 USD，总押不得超过余额';return}
   status.textContent=remove?'−':'+';update();tone(350+i*55,.045);
 }
 symbols.forEach(([name,payout],i)=>{
@@ -39,10 +66,16 @@ symbols.forEach(([name,payout],i)=>{
 });
 function update(){
   const state=game.snapshot();
+  $('wallet').textContent=state.wallet.toLocaleString('zh-CN');
+  $('insert-value').textContent=`$${step}`;
+  $('insert-coin').disabled=state.busy||state.wallet<step;
+  $('insert-coin').setAttribute('aria-label',`投入 ${step} USD 模拟币`);
+  $('cash-out').disabled=state.busy||state.credit===0||state.total>0;
+  setLed('result-led',state.win);
   [...bets.querySelectorAll('.bet')].forEach((button,i)=>{
     button.classList.toggle('chosen',state.bets[i]>0);
     button.parentElement.querySelector('.bet-count').textContent=String(state.bets[i]).padStart(2,'0');
-    button.setAttribute('aria-label',`${symbols[i][0]}，已押 ${state.bets[i]} 分，${subtract?'减':'加'}注 ${step} 分`);
+    button.setAttribute('aria-label',`${symbols[i][0]}，已押 ${state.bets[i]} USD，${subtract?'减':'加'}注 ${step} USD`);
     button.disabled=state.busy;
   });
   $('total').textContent=String(state.total).padStart(3,'0');
@@ -118,7 +151,7 @@ function showAward(kind,amount){
   const center=$('machine-center');
   center.dataset.award=kind;center.dataset.pattern=profile[3];
   center.style.setProperty('--award-primary',profile[1]);center.style.setProperty('--award-secondary',profile[2]);
-  $('award-title').textContent=profile[0];$('award-amount').textContent=amount===null?'◆':`+${amount.toLocaleString('zh-CN')}`;
+  $('award-title').textContent=profile[0];if(amount===null)$('award-amount').textContent='◆';else setLed('award-amount',amount);
   center.classList.add('has-award');
 }
 const tiles=[...document.querySelectorAll('.tile')];
@@ -127,9 +160,9 @@ function animate(){
   let target;
   try{target=game.start()}catch{status.textContent='无法取得安全随机数，未扣分，请重试';return}
   if(target===null)return;
-  clearAward();
+  clearAward();setLed('multiplier-led',0,3);$('result-symbol').replaceChildren();
   tiles.forEach(t=>t.classList.remove('bonus-hit','train-head'));$('jackpot-display').classList.remove('jackpot-won');$('lucky-lamp').classList.remove('lit');$('lucky-lamp').textContent='LUCKY LIGHT / 幸运灯';$('round-detail').textContent='';$('guess-number').textContent='—';
-  const total=game.snapshot().total;update();status.textContent=`已扣 ${total} 分 · 跑灯中`;
+  const total=game.snapshot().total;update();status.textContent=`已扣 ${total} USD · 跑灯中`;
   const distance=72+(target-current+24)%24;let tick=0;
   function frame(){
     tiles[current].classList.remove('active');current=(current+1)%24;
@@ -144,10 +177,11 @@ function animate(){
 function finishRound(){
   const result=game.settle();if(!result)return;
   update();
-  status.textContent=`${bonusNames[result.bonusType]||symbols[result.symbol][0]+' ×'+result.multiplier} · ${result.win?'得 '+result.win+' 分':'未中奖'}`;
-  if(game.snapshot().credit===0)status.textContent+=' · 积分已用完';
-  const extras=result.awards.map(a=>{const [i,m]=route[a.index];return `${a.index+1}号 ${symbols[i][0]} ×${m}：${a.win} 分`}).join('；');
-  $('round-detail').textContent=`主灯 ${result.baseWin} 分${extras?'；'+bonusNames[result.bonusType]+' '+result.bonusWin+' 分（'+extras+'）':''}${result.jackpotWin?'；累积彩金 '+result.jackpotWin+' 分，彩金池重置为 1000 分':''}。${result.win?'得分已加入余额。':''}`;
+  status.textContent=`${bonusNames[result.bonusType]||symbols[result.symbol][0]+' ×'+result.multiplier} · ${result.win?'得 '+result.win+' USD':'未中奖'}`;
+  if(game.snapshot().credit===0)status.textContent+=' · USD已用完';
+  setLed('multiplier-led',result.multiplier,3);$('result-symbol').innerHTML=sprite(result.symbol);
+  const extras=result.awards.map(a=>{const [i,m]=route[a.index];return `${a.index+1}号 ${symbols[i][0]} ×${m}：${a.win} USD`}).join('；');
+  $('round-detail').textContent=`主灯 ${result.baseWin} USD${extras?'；'+bonusNames[result.bonusType]+' '+result.bonusWin+' USD（'+extras+'）':''}${result.jackpotWin?'；累积彩金 '+result.jackpotWin+' USD，彩金池重置为 1000 USD':''}。${result.win?'得分已加入余额。':''}`;
   if(result.win){showAward(result.bonusType||['bar','seven','star','melon','bell','papaya','orange','apple'][result.symbol],result.win);tone(700,.25)}else clearAward();
 }
 function showBonus(){
@@ -159,7 +193,7 @@ function showBonus(){
   if(bonus.type==='jackpot'){
     const amount=game.snapshot().jackpot;
     $('jackpot-display').classList.add('jackpot-won');
-    status.textContent=`累积彩金 · ${amount} 分`;
+    status.textContent=`累积彩金 · ${amount} USD`;
     tone(880,.4);setTimeout(finishRound,1600);return;
   }
   if(triple){
@@ -188,9 +222,9 @@ function guess(choice){
   $('guess-number').textContent='…';tone(400,.12);
   setTimeout(()=>{
     const result=game.settleGamble();if(!result)return;
-    $('guess-number').textContent=result.number;
-    update();status.textContent=`开出 ${result.number} · ${result.won?'猜中，得 '+result.win+' 分':'猜错，比倍分归零'}`;
-    $('round-detail').textContent=`本次比倍投入 ${result.stake} 分，${result.won?'赢得 '+result.win+' 分':'得 0 分'}。${result.collected?'已达到 5 次上限，自动收分。':''}`;
+    setLed('guess-number',result.number,2);
+    update();status.textContent=`开出 ${result.number} · ${result.won?'猜中，得 '+result.win+' USD':'猜错，比倍分归零'}`;
+    $('round-detail').textContent=`本次比倍投入 ${result.stake} USD，${result.won?'赢得 '+result.win+' USD':'得 0 USD'}。${result.collected?'已达到 5 次上限，自动收分。':''}`;
     if(result.won)showAward('double',result.win);else clearAward();
     tone(result.won?800:130,.25);
   },900);
@@ -200,3 +234,5 @@ $('collect').onclick=()=>{if(game.collect()){update();status.textContent='已收
 start.onclick=animate;
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.repeat&&e.target===document.body){e.preventDefault();animate()}});
 update();
+
+setLed('multiplier-led',0,3);

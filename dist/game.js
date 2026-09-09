@@ -40,10 +40,18 @@
     return {type:'jackpot',indices:[]};
   }
   function createGame(){
-    let credit=1000,bets=Array(8).fill(0),previous=null,pending=null,win=0,risk=0,guesses=0,gamble=null,jackpot=1000;
+    let wallet=100,credit=0,bets=Array(8).fill(0),previous=null,pending=null,win=0,risk=0,guesses=0,gamble=null,jackpot=1000;
     const busy=()=>pending!==null||gamble!==null;
     return {
-      snapshot:()=>({credit,bets:[...bets],previous:previous&&[...previous],busy:busy(),win,risk,guesses,jackpot,total:sum(bets)}),
+      snapshot:()=>({wallet,credit,bets:[...bets],previous:previous&&[...previous],busy:busy(),win,risk,guesses,jackpot,total:sum(bets)}),
+      insertCoin(amount){
+        if(busy()||![1,5,10].includes(amount)||amount>wallet)return false;
+        wallet-=amount;credit+=amount;return true;
+      },
+      cashOut(){
+        if(busy()||credit<=0||sum(bets)>0)return 0;
+        const amount=credit;wallet+=amount;credit=0;risk=0;return amount;
+      },
       adjust(index,delta){
         if(busy()||!Number.isInteger(index)||index<0||index>7||!Number.isInteger(delta))return false;
         const next=Math.max(0,bets[index]+delta);
