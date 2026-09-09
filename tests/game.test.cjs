@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const { symbols, route, randomIndex, createGame: rawCreateGame } = require('../dist/game.js');
-const createGame=()=>{const g=rawCreateGame();for(let i=0;i<10;i++)g.insertCoin(10);const start=g.start;g.start=(choose)=>start(choose,()=>({type:null,indices:[]}));return g};
+const createGame=()=>{const g=rawCreateGame();g.stageCoins(10,10);g.insertStaged();const start=g.start;g.start=(choose)=>start(choose,()=>({type:null,indices:[]}));return g};
 assert.equal(route.length,24);
 assert.deepEqual(symbols.map(s=>s.slice(1)),[[120,50],[40,3],[30,3],[20,3],[20,3],[15,3],[10,3],[5,3]]);
 for (const [index,[symbol,multiplier]] of route.entries()) {

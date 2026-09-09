@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict');
 const {createGame:rawCreateGame,drawBonus,route}=require('../dist/game.js');
-const createGame=()=>{const g=rawCreateGame();for(let i=0;i<10;i++)g.insertCoin(10);return g};
+const createGame=()=>{const g=rawCreateGame();g.stageCoins(10,10);g.insertStaged();return g};
 const none=()=>({type:null,indices:[]});
 function sequence(values){let i=0;return max=>{const value=values[i++];assert.ok(value>=0&&value<max);return value}}
 assert.deepEqual(drawBonus(sequence([15])),{type:null,indices:[]});

@@ -40,17 +40,27 @@
     return {type:'jackpot',indices:[]};
   }
   function createGame(){
-    let wallet=100,credit=0,bets=Array(8).fill(0),previous=null,pending=null,win=0,risk=0,guesses=0,gamble=null,jackpot=1000;
+    let wallet=100,credit=0,stagedCount=0,stagedUnit=1,payout=0,bets=Array(8).fill(0),previous=null,pending=null,win=0,risk=0,guesses=0,gamble=null,jackpot=1000;
     const busy=()=>pending!==null||gamble!==null;
     return {
-      snapshot:()=>({wallet,credit,bets:[...bets],previous:previous&&[...previous],busy:busy(),win,risk,guesses,jackpot,total:sum(bets)}),
-      insertCoin(amount){
-        if(busy()||![1,5,10].includes(amount)||amount>wallet)return false;
-        wallet-=amount;credit+=amount;return true;
+      snapshot:()=>({wallet,credit,stagedCount,stagedUnit,staged:stagedCount*stagedUnit,payout,bets:[...bets],previous:previous&&[...previous],busy:busy(),win,risk,guesses,jackpot,total:sum(bets)}),
+      stageCoins(count,unit){
+        if(busy()||!Number.isInteger(count)||count<0||count>20||![1,5,10].includes(unit))return false;
+        const available=wallet+stagedCount*stagedUnit,amount=count*unit;
+        if(amount>available)return false;
+        wallet=available-amount;stagedCount=count;stagedUnit=unit;return true;
+      },
+      insertStaged(){
+        if(busy()||stagedCount===0)return 0;
+        const amount=stagedCount*stagedUnit;credit+=amount;stagedCount=0;return amount;
       },
       cashOut(){
         if(busy()||credit<=0||sum(bets)>0)return 0;
-        const amount=credit;wallet+=amount;credit=0;risk=0;return amount;
+        const amount=credit;payout+=amount;credit=0;risk=0;return amount;
+      },
+      collectPayout(){
+        if(busy()||payout===0)return 0;
+        const amount=payout;wallet+=amount;payout=0;return amount;
       },
       adjust(index,delta){
         if(busy()||!Number.isInteger(index)||index<0||index>7||!Number.isInteger(delta))return false;

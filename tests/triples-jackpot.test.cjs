@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict');
 const {createGame:rawCreateGame,drawBonus,triples,route}=require('../dist/game.js');
-const createGame=()=>{const g=rawCreateGame();for(let i=0;i<10;i++)g.insertCoin(10);return g};
+const createGame=()=>{const g=rawCreateGame();g.stageCoins(10,10);g.insertStaged();return g};
 const noBonus=()=>({type:null,indices:[]}),jackpot=()=>({type:'jackpot',indices:[]});
 const frequencies={};
 for(let ticket=0;ticket<120;ticket++){

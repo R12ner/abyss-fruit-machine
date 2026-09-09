@@ -22,27 +22,53 @@ function setLed(id,value,digits=6){
   node.setAttribute('aria-label',String(value));
   node.innerHTML=[...text].map(char=>`<span class="led-digit" aria-hidden="true">${[...'abcdefg'].map(segment=>`<i class="seg seg-${segment}${(segmentMap[Number(char)]||'').includes(segment)?' on':''}"></i>`).join('')}</span>`).join('');
 }
-let coinTimer;
+let coinTimer,payoutAnimating=false;
 function ejectCoins(amount){
-  clearTimeout(coinTimer);const stream=$('coin-stream');stream.replaceChildren();
-  $('payout-label').textContent=`$${amount.toLocaleString('zh-CN')} USD`;
-  for(let i=0;i<Math.min(12,amount);i++){
+  clearTimeout(coinTimer);const stream=$('coin-stream');stream.replaceChildren();payoutAnimating=true;
+  $('coin-chute').classList.add('has-coins','dispensing');
+  $('payout-label').textContent=`$${game.snapshot().payout.toLocaleString('zh-CN')} USD`;
+  const count=Math.min(18,game.snapshot().payout);
+  for(let i=0;i<count;i++){
     const coin=document.createElement('img');coin.src='assets/coin.png';coin.alt='';
-    coin.style.setProperty('--coin-delay',`${i*.12}s`);coin.style.setProperty('--coin-x',`${(i%5-2)*12}px`);stream.append(coin);
+    coin.style.setProperty('--coin-delay',`${i*.08}s`);
+    coin.style.setProperty('--coin-x',`${(i%6-2.5)*11}px`);
+    coin.style.setProperty('--coin-y',`${Math.floor(i/6)*-4}px`);
+    coin.style.setProperty('--coin-angle',`${(i*37)%65-32}deg`);
+    stream.append(coin);
   }
-  tone(750,.2);coinTimer=setTimeout(()=>stream.replaceChildren(),3000);
+  update();tone(750,.2);
+  coinTimer=setTimeout(()=>{payoutAnimating=false;$('coin-chute').classList.remove('dispensing');update()},2400);
 }
+for(let i=1;i<=20;i++){
+  const position=document.createElement('button');position.className='tray-position';position.dataset.count=i;
+  position.innerHTML='<img src="assets/coin.png" alt="" aria-hidden="true">';
+  position.onclick=()=>{
+    if(game.stageCoins(i,step)){update();status.textContent=`放币槽：${i} 枚 × ${step} USD`;tone(430+i*8,.05)}
+  };
+  $('staging-tray').append(position);
+}
+$('clear-tray').onclick=()=>{if(game.stageCoins(0,step)){update();status.textContent='放币槽已清空，币已退回钱包'}};
+$('coin-chute').onclick=()=>{
+  if(payoutAnimating)return;
+  const amount=game.collectPayout();if(!amount)return;
+  $('coin-stream').replaceChildren();$('coin-chute').classList.remove('has-coins');
+  $('payout-label').textContent='';update();status.textContent=`领取 ${amount} USD`;tone(620,.15);
+};
 const engravings={subtract:'减注',repeat:'重押',clear:'清空',start:'启动', 'guess-small':'小 1–7','guess-big':'大 8–14',collect:'收分'};
 for(const [id,label] of Object.entries(engravings)){
   const button=$(id),mark=document.createElement('span');mark.className='button-engraving';mark.textContent=label;button.append(mark);
 }
 document.querySelectorAll('[data-step]').forEach(button=>{const mark=document.createElement('span');mark.className='button-engraving';mark.textContent=`×${button.dataset.step}`;button.append(mark)});
 $('insert-coin').onclick=()=>{
-  if(!game.insertCoin(step)){status.textContent='钱包余额不足或机台运行中';return}
-  $('insert-coin').classList.remove('inserting');void $('insert-coin').offsetWidth;$('insert-coin').classList.add('inserting');
-  update();status.textContent=`已投币 ${step} USD`;tone(500,.12);
+  const state=game.snapshot(),amount=game.insertStaged();if(!amount)return;
+  const feed=$('feeding-coins');feed.replaceChildren();
+  for(let i=0;i<state.stagedCount;i++){
+    const coin=document.createElement('img');coin.src='assets/coin.png';coin.alt='';
+    coin.style.setProperty('--feed-delay',`${i*.04}s`);feed.append(coin);
+  }
+  update();status.textContent=`已投入槽内全部 ${amount} USD`;tone(500,.12);
 };
-$('cash-out').onclick=()=>{const amount=game.cashOut();if(amount){update();clearAward();ejectCoins(amount);status.textContent=`已退币 ${amount} USD 至钱包`}};
+$('cash-out').onclick=()=>{const amount=game.cashOut();if(amount){clearAward();ejectCoins(amount);status.textContent=`已退币 ${amount} USD，落定后点击出币槽领取`}};
 function tone(freq,duration){
   if(!sound)return;
   try{audio??=new(window.AudioContext||window.webkitAudioContext)();audio.resume();
@@ -67,9 +93,21 @@ symbols.forEach(([name,payout],i)=>{
 function update(){
   const state=game.snapshot();
   $('wallet').textContent=state.wallet.toLocaleString('zh-CN');
-  $('insert-value').textContent=`$${step}`;
-  $('insert-coin').disabled=state.busy||state.wallet<step;
-  $('insert-coin').setAttribute('aria-label',`投入 ${step} USD 模拟币`);
+  $('insert-value').textContent=`$${state.staged}`;
+  $('insert-coin').disabled=state.busy||state.staged===0;
+  $('insert-coin').setAttribute('aria-label',`一次投入放币槽内 ${state.staged} USD`);
+  $('staged-label').textContent=state.stagedCount?`${state.stagedCount} × $${state.stagedUnit} = $${state.staged}`:'0 USD';
+  $('clear-tray').disabled=state.busy||state.stagedCount===0;
+  [...$('staging-tray').children].forEach((position,i)=>{
+    const count=i+1;
+    position.classList.toggle('filled',count<=state.stagedCount);
+    position.classList.toggle('end-position',count===state.stagedCount);
+    position.disabled=state.busy||count*step>state.wallet+state.staged;
+    position.setAttribute('aria-label',`放入 ${count} 枚，每枚 ${step} USD，共 ${count*step} USD`);
+    position.setAttribute('aria-pressed',String(count===state.stagedCount));
+  });
+  $('coin-chute').disabled=state.busy||payoutAnimating||state.payout===0;
+  $('coin-chute').setAttribute('aria-label',payoutAnimating?'正在出币':`领取出币槽内 ${state.payout} USD`);
   $('cash-out').disabled=state.busy||state.credit===0||state.total>0;
   setLed('result-led',state.win);
   [...bets.querySelectorAll('.bet')].forEach((button,i)=>{
