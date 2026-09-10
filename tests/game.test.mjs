@@ -1,5 +1,5 @@
-const assert = require('node:assert/strict');
-const { symbols, route, randomIndex, createGame: rawCreateGame } = require('../dist/game.js');
+import assert from 'node:assert/strict';
+import {symbols,route,randomIndex,createGame as rawCreateGame} from '../dist/js/core/game.mjs';
 const createGame=()=>{const g=rawCreateGame();g.stageCoins(10,10);g.insertStaged();const start=g.start;g.start=(choose)=>start(choose,()=>({type:null,indices:[]}));return g};
 assert.equal(route.length,24);
 assert.deepEqual(symbols.map(s=>s.slice(1)),[[120,50],[40,3],[30,3],[20,3],[20,3],[15,3],[10,3],[5,3]]);
@@ -17,7 +17,8 @@ for (const [index,[symbol,multiplier]] of route.entries()) {
   const result=game.settle();
   assert.equal(result.index,index);
   assert.equal(result.win,(symbol+1)*multiplier);
-  assert.equal(game.snapshot().credit,64+result.win);
+  assert.equal(game.snapshot().credit,64);
+  assert.equal(game.snapshot().win,result.win);
   assert.equal(game.snapshot().total,0);
   assert.equal(game.settle(),null); // no double payout
   assert.equal(game.repeat(),true);
@@ -27,7 +28,7 @@ for (const [index,[symbol,multiplier]] of route.entries()) {
 const examples=[[7,10,6,50],[3,5,8,100],[2,10,21,30],[0,2,4,240],[7,10,2,0]];
 for(const [symbol,stake,index,win] of examples){
   const g=createGame();g.adjust(symbol,stake);g.start(()=>index);
-  assert.equal(g.settle().win,win);assert.equal(g.snapshot().credit,100-stake+win);
+  assert.equal(g.settle().win,win);assert.equal(g.snapshot().credit,100-stake);assert.equal(g.snapshot().win,win);
 }
 const g=createGame();
 assert.equal(g.start(()=>0),null);assert.equal(g.repeat(),false);
