@@ -9,7 +9,7 @@
 
 ```text
 dist/
-├── assets/                  # 水果与硬币图片
+├── assets/                  # 硬币图片与 fruits/ 独立水果素材
 ├── js/
 │   ├── audio/
 │   │   ├── audio-engine.mjs # Web Audio、音量设置和音效播放
