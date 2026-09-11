@@ -96,6 +96,10 @@ const root=globalThis;
         const locked=sum(bets),freeCredit=Math.max(0,credit-locked),creditLeft=take(freeCredit);credit=locked+creditLeft;
         win=take(win);risk=Math.min(risk,win);return amount;
       },
+      deposit(amount){
+        if(busy()||!Number.isInteger(amount)||amount<=0)return 0;
+        wallet+=amount;return amount;
+      },
       adjust(index,delta){
         if(busy()||!Number.isInteger(index)||index<0||index>7||!Number.isInteger(delta))return false;
         const next=Math.max(0,bets[index]+delta);

@@ -55,6 +55,8 @@ assert.equal(shop.snapshot().exchangeable,90);assert.equal(shop.spend(75),75);
 assert.equal(shop.snapshot().wallet,0);assert.equal(shop.snapshot().credit,10);assert.equal(shop.snapshot().bets[7],10);assert.equal(shop.snapshot().win,15);
 assert.equal(shop.snapshot().totalFunds,25);assert.equal(shop.snapshot().exchangeable,15);assert.equal(shop.spend(16),0);
 assert.equal(shop.spend(15),15);assert.equal(shop.snapshot().exchangeable,0);assert.equal(shop.snapshot().totalFunds,10);
+assert.equal(shop.deposit(25),25);assert.equal(shop.snapshot().wallet,25);assert.equal(shop.snapshot().exchangeable,25);assert.equal(shop.snapshot().totalFunds,35);
+assert.equal(shop.deposit(0),0);assert.equal(shop.deposit(1.5),0);
 console.log('Passed: staged quantities and direct entry, manual transfers, persistence restore, subsidy, payout collection, and five-account conservation.');
 // Starting a new round banks all prior WIN exactly once, before charging bets.
 const banked=createGame({version:2,wallet:17,credit:100,win:50000,risk:50000,guesses:2});

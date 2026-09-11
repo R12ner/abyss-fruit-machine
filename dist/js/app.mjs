@@ -243,6 +243,13 @@ window.addEventListener('abyss:buy-roulette-chips',event=>{
   saveGameState();update();status.textContent=`已在筹码商店消费 ${spent} USD`;
   window.dispatchEvent(new CustomEvent('abyss:fruit-balance-changed',{detail:{balance:game.snapshot().exchangeable}}));
 });
+window.addEventListener('abyss:sell-roulette-chips',event=>{
+  const request=event.detail;if(!request)return;
+  const deposited=game.deposit(request.amount);request.accepted=deposited===request.amount;
+  if(!request.accepted)return;
+  saveGameState();update();status.textContent=`自助出售筹码：钱包增加 ${deposited} USD`;
+  window.dispatchEvent(new CustomEvent('abyss:fruit-balance-changed',{detail:{balance:game.snapshot().exchangeable}}));
+});
 function update(){
   const state=game.snapshot();
   if(state.busy)stopAllKeyHolds();
