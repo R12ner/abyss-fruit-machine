@@ -6,7 +6,9 @@ const bonusNames={gift:'幸运送灯',train:'火车连奖',bigTriple:'大三元'
 const FRUIT_KEYS=Object.freeze(['q','w','e','r','t','y','u','i']);
 const STORAGE_KEY='abyss-fruit-arcade-state-v2';
 const COIN_STYLE_KEY='abyss-fruit-arcade-coin-style-v1';
+const KEY_HINT_KEY='abyss-fruit-key-hints-v1';
 const COIN_STYLES=Object.freeze({arcade:'街机币',bitcoin:'BTC',usdt:'USDT',usdc:'USDC'});
+let showKeyHints=(()=>{try{return localStorage.getItem(KEY_HINT_KEY)!=='off'}catch{return true}})();
 let coinStyle=(()=>{try{const saved=localStorage.getItem(COIN_STYLE_KEY);return COIN_STYLES[saved]?saved:'arcade'}catch{return 'arcade'}})();
 const coinAsset=()=>`assets/coins/${coinStyle}.png`;
 function createCoinImage(){const coin=document.createElement('img');coin.src=coinAsset();coin.alt='';coin.dataset.coin='';return coin}
@@ -34,6 +36,12 @@ audioNote.before(coinSetting);
 const coinSelect=coinSetting.querySelector('select');
 for(const [value,label] of Object.entries(COIN_STYLES)){const option=document.createElement('option');option.value=value;option.textContent=label;coinSelect.append(option)}
 coinSelect.value=coinStyle;coinSelect.onchange=()=>applyCoinStyle(coinSelect.value);applyCoinStyle(coinStyle);
+const keyHintSetting=document.createElement('label');keyHintSetting.className='key-hint-setting';
+keyHintSetting.innerHTML='<span><b>键盘按键提示</b><small>显示水果按钮上的 QWERTYUI</small></span><input id="key-hint-toggle" type="checkbox" role="switch" aria-label="显示键盘按键提示"><i aria-hidden="true"></i>';
+audioNote.before(keyHintSetting);
+const keyHintToggle=keyHintSetting.querySelector('input');
+function applyKeyHints(enabled){showKeyHints=enabled;document.body.classList.toggle('hide-fruit-key-hints',!enabled);keyHintToggle.checked=enabled;try{localStorage.setItem(KEY_HINT_KEY,enabled?'on':'off')}catch{}}
+keyHintToggle.onchange=()=>applyKeyHints(keyHintToggle.checked);applyKeyHints(showKeyHints);
 $('coin-chute').querySelector('.engraving')?.remove();
 const transferControls=document.createElement('div');
 transferControls.className='transfer-controls';
@@ -227,6 +235,14 @@ function refreshInsertAvailability(){
 $('stage-amount').addEventListener('input',refreshInsertAvailability);
 $('stage-amount').addEventListener('keydown',e=>{if(e.key==='Enter'&&!$('insert-coin').disabled){e.preventDefault();$('insert-coin').click()}});
 function saveGameState(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(game.exportState()))}catch{}}
+window.addEventListener('abyss:fruit-balance-request',event=>{if(event.detail)event.detail.balance=game.snapshot().exchangeable});
+window.addEventListener('abyss:buy-roulette-chips',event=>{
+  const request=event.detail;if(!request)return;
+  const spent=game.spend(request.cost);request.accepted=spent===request.cost;
+  if(!request.accepted)return;
+  saveGameState();update();status.textContent=`已在筹码商店消费 ${spent} USD`;
+  window.dispatchEvent(new CustomEvent('abyss:fruit-balance-changed',{detail:{balance:game.snapshot().exchangeable}}));
+});
 function update(){
   const state=game.snapshot();
   if(state.busy)stopAllKeyHolds();

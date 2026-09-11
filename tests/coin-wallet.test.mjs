@@ -34,6 +34,7 @@ h.stageCoins(2,10);h.insertStaged();h.stageCoins(2,5);
 h.adjust(7,10);h.start(()=>6,none);h.settle();h.startGamble('small',()=>13);
 assert.equal(h.collectPayout(),0);assert.equal(h.stageCoins(0,1),false);h.settleGamble();
 assert.equal(h.snapshot().payout,20);assert.equal(h.snapshot().staged,10);assert.equal(h.snapshot().wallet,50);assert.equal(h.snapshot().credit,10);
+assert.equal(h.snapshot().exchangeable,70); // Unclaimed coins in the payout tray stay locked.
 // Direct amount entry, manual WIN/CREDIT transfers, persisted restore and zero-balance subsidy.
 const direct=createGame();assert.equal(direct.stageAmount(73),true);
 assert.equal(direct.snapshot().wallet,27);assert.equal(direct.snapshot().staged,73);assert.equal(direct.snapshot().stagedDirect,true);assert.equal(direct.snapshot().stagedCount,20);
@@ -48,6 +49,12 @@ assert.equal(funded.snapshot().win,60);assert.equal(funded.snapshot().risk,60);
 assert.equal(funded.startGamble('small',()=>6),true);assert.equal(funded.settleGamble().win,120);
 const empty=createGame({version:2,wallet:0,credit:0,stagedAmount:0,stagedCount:0,stagedUnit:1,stagedDirect:false,payout:0,bets:Array(8).fill(0),previous:null,win:0,risk:0,guesses:0,jackpot:1000});
 assert.equal(empty.snapshot().totalFunds,0);assert.equal(empty.grantSubsidy(),100);assert.equal(empty.snapshot().wallet,100);assert.equal(empty.grantSubsidy(),0);
+// The casino shop can spend only unlocked fruit-machine funds and preserves active bets.
+const shop=createGame();shop.stageAmount(80);shop.insertStaged();shop.adjust(7,10);shop.transfer('creditToWin',20);
+assert.equal(shop.snapshot().exchangeable,90);assert.equal(shop.spend(75),75);
+assert.equal(shop.snapshot().wallet,0);assert.equal(shop.snapshot().credit,10);assert.equal(shop.snapshot().bets[7],10);assert.equal(shop.snapshot().win,15);
+assert.equal(shop.snapshot().totalFunds,25);assert.equal(shop.snapshot().exchangeable,15);assert.equal(shop.spend(16),0);
+assert.equal(shop.spend(15),15);assert.equal(shop.snapshot().exchangeable,0);assert.equal(shop.snapshot().totalFunds,10);
 console.log('Passed: staged quantities and direct entry, manual transfers, persistence restore, subsidy, payout collection, and five-account conservation.');
 // Starting a new round banks all prior WIN exactly once, before charging bets.
 const banked=createGame({version:2,wallet:17,credit:100,win:50000,risk:50000,guesses:2});

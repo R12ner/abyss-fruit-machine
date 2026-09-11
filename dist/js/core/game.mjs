@@ -46,8 +46,9 @@ const root=globalThis;
     let wallet=integer(restored?.wallet,100),credit=integer(restored?.credit),stagedAmount=integer(restored?.stagedAmount),stagedCount=Math.min(20,integer(restored?.stagedCount)),stagedUnit=[1,5,10].includes(restored?.stagedUnit)?restored.stagedUnit:1,stagedDirect=Boolean(restored?.stagedDirect),payout=integer(restored?.payout),bets=sum(restoredBets)<=credit?restoredBets:Array(8).fill(0),previous=restored&&Array.isArray(restored.previous)&&restored.previous.length===8&&restored.previous.every(v=>Number.isInteger(v)&&v>=0&&v<=99)?[...restored.previous]:null,pending=null,win=integer(restored?.win),risk=Math.min(integer(restored?.risk),integer(restored?.win)),guesses=Math.min(5,integer(restored?.guesses)),gamble=null,jackpot=Math.max(1000,integer(restored?.jackpot,1000));
     const busy=()=>pending!==null||gamble!==null;
     const totalFunds=()=>wallet+stagedAmount+credit+payout+win;
+    const exchangeable=()=>wallet+stagedAmount+Math.max(0,credit-sum(bets))+win;
     return {
-      snapshot:()=>({wallet,credit,stagedCount,stagedUnit,stagedDirect,staged:stagedAmount,payout,bets:[...bets],previous:previous&&[...previous],busy:busy(),win,risk,guesses,jackpot,total:sum(bets),totalFunds:totalFunds()}),
+      snapshot:()=>({wallet,credit,stagedCount,stagedUnit,stagedDirect,staged:stagedAmount,payout,bets:[...bets],previous:previous&&[...previous],busy:busy(),win,risk,guesses,jackpot,total:sum(bets),totalFunds:totalFunds(),exchangeable:exchangeable()}),
       exportState:()=>({version:2,wallet,credit,stagedAmount,stagedCount,stagedUnit,stagedDirect,payout,bets:[...bets],previous:previous&&[...previous],win,risk,guesses,jackpot}),
       stageCoins(count,unit){
         if(busy()||!Number.isInteger(count)||count<0||count>20||![1,5,10].includes(unit))return false;
@@ -85,6 +86,15 @@ const root=globalThis;
       grantSubsidy(){
         if(busy()||totalFunds()!==0)return 0;
         wallet=100;return 100;
+      },
+      spend(amount){
+        if(busy()||!Number.isInteger(amount)||amount<=0||amount>exchangeable())return 0;
+        let remaining=amount;
+        const take=value=>{const used=Math.min(value,remaining);remaining-=used;return value-used};
+        wallet=take(wallet);stagedAmount=take(stagedAmount);
+        if(stagedAmount===0){stagedCount=0;stagedDirect=false}else{stagedCount=Math.min(20,stagedAmount);stagedUnit=1;stagedDirect=true}
+        const locked=sum(bets),freeCredit=Math.max(0,credit-locked),creditLeft=take(freeCredit);credit=locked+creditLeft;
+        win=take(win);risk=Math.min(risk,win);return amount;
       },
       adjust(index,delta){
         if(busy()||!Number.isInteger(index)||index<0||index>7||!Number.isInteger(delta))return false;

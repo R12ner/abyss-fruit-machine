@@ -14,7 +14,7 @@ function loadState(){
   }catch{return {balance:25000,history:[]}}
 }
 
-const state={...loadState(),selectedChip:25,bets:new Map(),actions:[],busy:false,lastResult:null,wheelRotation:0};
+const state={...loadState(),selectedChip:25,bets:new Map(),stacks:new Map(),actions:[],busy:false,lastResult:null,wheelRotation:0,tableCollapsed:false};
 function saveState(){try{localStorage.setItem(STORE_KEY,JSON.stringify({balance:state.balance,history:state.history}))}catch{}}
 
 function chipArt(value,extra=''){
@@ -58,6 +58,7 @@ roulette.innerHTML=`
   <header class="roulette-header">
     <button type="button" class="casino-menu-button">♣ <span>赌场菜单</span></button>
     <div class="roulette-brand"><small>TABLE 01 · EUROPEAN</small><strong>深渊轮盘</strong></div>
+    <button type="button" class="roulette-shop-button">筹码商店</button>
     <div class="roulette-wallet"><span>筹码余额</span><output id="roulette-balance"></output></div>
     <button type="button" class="roulette-rules-button" aria-label="查看轮盘规则">?</button>
   </header>
@@ -66,10 +67,10 @@ roulette.innerHTML=`
     <div class="roulette-layout">
       <section class="wheel-panel" aria-label="轮盘">
         <div class="wheel-crown"><div class="roulette-pointer" aria-hidden="true"></div><div class="roulette-wheel" id="roulette-wheel"><div class="wheel-disc" id="wheel-disc"></div><div class="ball-track" id="ball-track"><i class="roulette-ball"></i></div><div class="wheel-hub"><span>ABYSS</span><b id="wheel-result">—</b></div></div></div>
-        <div class="recent-results"><span>最近开奖</span><div id="roulette-history"></div><button type="button" id="roulette-refill" hidden>领取 25,000 USD 娱乐筹码</button></div>
+        <div class="recent-results"><span>最近开奖</span><div id="roulette-history"></div><button type="button" id="roulette-refill" hidden>前往筹码商店</button></div>
       </section>
       <section class="betting-panel" aria-label="轮盘下注桌">
-        <div class="table-heading"><div><small>EUROPEAN TABLE</small><h2>下注台</h2></div><p>点数字下注 · 点数字边缘可下分注/角注</p></div>
+        <div class="table-heading"><div><small>EUROPEAN TABLE</small><h2>下注台</h2></div><p>点数字下注 · 点数字边缘可下分注/角注</p><button type="button" id="table-collapse" aria-expanded="true">折叠下注台</button></div>
         <div class="bet-table-scroll"><div id="roulette-table" class="roulette-table"></div></div>
         <div class="bet-summary" id="bet-summary"><span>尚未下注</span></div>
       </section>
@@ -82,6 +83,12 @@ roulette.innerHTML=`
     <p>轮盘有 0–36 共 37 个号码；0 为绿色，其余为 18 个红色和 18 个黑色。每次旋转相互独立，球停在哪个号码，就按所有覆盖该号码的下注分别结算。</p>
     <table><thead><tr><th>下注</th><th>覆盖号码</th><th>净赔率</th></tr></thead><tbody><tr><td>单号</td><td>1 个</td><td>35:1</td></tr><tr><td>分注</td><td>相邻 2 个</td><td>17:1</td></tr><tr><td>街注 / 三数</td><td>3 个</td><td>11:1</td></tr><tr><td>角注 / 首四</td><td>4 个</td><td>8:1</td></tr><tr><td>双街</td><td>相邻两排 6 个</td><td>5:1</td></tr><tr><td>十二数区 / 列</td><td>12 个</td><td>2:1</td></tr><tr><td>红黑 / 单双 / 大小</td><td>18 个</td><td>1:1</td></tr></tbody></table>
     <p>操作：先选筹码，再点击号码或外部下注区。号码之间的细长触点是分注，四格交点是角注；“街”覆盖一排三个号码，街与街之间的小菱形是双街。右键或 Shift + 点击可从该位置移除当前面额。</p><p>赔率是净赢金额；中奖时系统还会返还该注本金。0 不属于红黑、单双、大小、十二数区或列，因此开出 0 时这些外部下注均输。</p><button type="button" class="roulette-rules-confirm">明白了</button>
+  </dialog>
+  <dialog id="roulette-shop" class="roulette-shop">
+    <button type="button" class="close roulette-shop-close" aria-label="关闭商店">×</button><span class="rules-kicker">CASINO CHIP DESK</span><h2>筹码商店</h2>
+    <p>使用水果机中的可用模拟 USD 兑换轮盘筹码。固定汇率：<b>1 USD = 100 筹码</b>。</p><div class="shop-balance"><span>水果机可用资金</span><output id="fruit-shop-balance">0 USD</output></div>
+    <div class="shop-packages"><button type="button" data-fruit-cost="10"><b>1,000</b><span>轮盘筹码</span><small>10 USD</small></button><button type="button" data-fruit-cost="25"><b>2,500</b><span>轮盘筹码</span><small>25 USD</small></button><button type="button" data-fruit-cost="50"><b>5,000</b><span>轮盘筹码</span><small>50 USD</small></button></div>
+    <p id="shop-status" class="shop-status" aria-live="polite"></p>
   </dialog>`;
 document.body.append(roulette);
 
@@ -104,7 +111,7 @@ wheelDisc.style.background=`conic-gradient(from 0deg,${stops.join(',')})`;
 ROULETTE_SEQUENCE.forEach((number,index)=>{const label=document.createElement('span');label.className=`wheel-pocket ${numberColor(number)}`;label.textContent=number;label.style.setProperty('--pocket-angle',`${index*stepAngle}deg`);label.style.setProperty('--pocket-inverse',`${-index*stepAngle}deg`);wheelDisc.append(label)});
 
 function makeBetButton(id,label,className=''){
-  const button=document.createElement('button');button.type='button';button.dataset.betId=id;button.className=`roulette-bet ${className}`.trim();button.innerHTML=`<span>${label}</span><output class="bet-amount"></output>`;return button;
+  const button=document.createElement('button');button.type='button';button.dataset.betId=id;button.className=`roulette-bet ${className}`.trim();button.innerHTML=`<span>${label}</span><span class="bet-stack" aria-hidden="true"></span><output class="bet-amount"></output>`;return button;
 }
 function addBetButton(container,id,label,className=''){const button=makeBetButton(id,label,className);container.append(button);return button}
 function buildTable(){
@@ -130,34 +137,43 @@ function buildChipRack(){
 }
 
 function totalBet(){return [...state.bets.values()].reduce((sum,value)=>sum+value,0)}
+function denominationStack(amount){const chips=[];for(const value of [...CHIP_VALUES].reverse())while(amount>=value){chips.push(value);amount-=value}return chips}
+function setStack(id,stack){if(stack.length)state.stacks.set(id,stack);else state.stacks.delete(id);const total=stack.reduce((sum,value)=>sum+value,0);if(total)state.bets.set(id,total);else state.bets.delete(id)}
 function adjustBet(id,remove=false){
-  if(state.busy||!describeBet(id))return;const current=state.bets.get(id)||0,amount=state.selectedChip;
-  if(remove){const removed=Math.min(current,amount);if(!removed)return;const next=current-removed;if(next)state.bets.set(id,next);else state.bets.delete(id);state.actions.push({id,amount:-removed});setStatus(`已从「${describeBet(id).label}」移除 ${money(removed)} USD`)}
-  else{if(totalBet()+amount>state.balance){setStatus('筹码余额不足，不能继续下注');pulseBalance();return}state.bets.set(id,current+amount);state.actions.push({id,amount});setStatus(`已在「${describeBet(id).label}」下注 ${money(amount)} USD`)}render();
+  if(state.busy||!describeBet(id))return;const amount=state.selectedChip,stack=[...(state.stacks.get(id)||[])],before=[...stack];
+  if(remove){let remaining=Math.min(stack.reduce((sum,value)=>sum+value,0),amount);if(!remaining)return;const removed=remaining;while(remaining&&stack.length){const top=stack.pop();if(top>remaining){stack.push(...denominationStack(top-remaining));remaining=0}else remaining-=top}setStack(id,stack);state.actions.push({id,before});setStatus(`已从「${describeBet(id).label}」移除 ${money(removed)} USD`);playChipDrop(.55)}
+  else{if(totalBet()+amount>state.balance){setStatus('筹码余额不足，不能继续下注');pulseBalance();return}stack.push(amount);setStack(id,stack);state.actions.push({id,before});setStatus(`已在「${describeBet(id).label}」下注 ${money(amount)} USD`);playChipDrop()}render();
 }
-function undo(){if(state.busy)return;const action=state.actions.pop();if(!action)return;const current=state.bets.get(action.id)||0,next=current-action.amount;if(next>0)state.bets.set(action.id,next);else state.bets.delete(action.id);setStatus('已撤销上一步下注');render()}
-function clearBets(){if(state.busy||!state.bets.size)return;state.bets.clear();state.actions=[];setStatus('已清空桌面下注');render()}
+function undo(){if(state.busy)return;const action=state.actions.pop();if(!action)return;setStack(action.id,[...action.before]);setStatus('已撤销上一步下注');playChipDrop(.45);render()}
+function clearBets(){if(state.busy||!state.bets.size)return;state.bets.clear();state.stacks.clear();state.actions=[];setStatus('已清空桌面下注');render()}
 function setStatus(message){$('#roulette-status',roulette).textContent=message}
 function pulseBalance(){const node=$('.roulette-wallet',roulette);node.classList.remove('pulse');requestAnimationFrame(()=>node.classList.add('pulse'))}
 function secureNumber(max){const limit=Math.floor(0x100000000/max)*max,buffer=new Uint32Array(1);do{crypto.getRandomValues(buffer)}while(buffer[0]>=limit);return buffer[0]%max}
-function playTone(frequency,duration=.08){try{const AudioContext=window.AudioContext||window.webkitAudioContext,context=playTone.context??=new AudioContext(),oscillator=context.createOscillator(),gain=context.createGain();oscillator.type='triangle';oscillator.frequency.value=frequency;gain.gain.setValueAtTime(.035,context.currentTime);gain.gain.exponentialRampToValueAtTime(.001,context.currentTime+duration);oscillator.connect(gain);gain.connect(context.destination);oscillator.start();oscillator.stop(context.currentTime+duration)}catch{}}
+function sfxLevel(){try{const saved=JSON.parse(localStorage.getItem('abyss-fruit-arcade-audio-v1')||'null');return Number.isFinite(saved?.sfx)?saved.sfx:.68}catch{return .68}}
+function playTone(frequency,duration=.08){try{const level=sfxLevel();if(level<=0)return;const AudioContext=window.AudioContext||window.webkitAudioContext,context=playTone.context??=new AudioContext(),oscillator=context.createOscillator(),gain=context.createGain();oscillator.type='triangle';oscillator.frequency.value=frequency;gain.gain.setValueAtTime(.035*level,context.currentTime);gain.gain.exponentialRampToValueAtTime(.001,context.currentTime+duration);oscillator.connect(gain);gain.connect(context.destination);oscillator.start();oscillator.stop(context.currentTime+duration)}catch{}}
+function playChipDrop(level=1){try{const volume=sfxLevel();if(volume<=0)return;const AudioContext=window.AudioContext||window.webkitAudioContext,context=playTone.context??=new AudioContext(),now=context.currentTime;[1480,2460].forEach((frequency,index)=>{const oscillator=context.createOscillator(),gain=context.createGain();oscillator.type=index?'triangle':'sine';oscillator.frequency.setValueAtTime(frequency,now);oscillator.frequency.exponentialRampToValueAtTime(frequency*.62,now+.055+index*.018);gain.gain.setValueAtTime(.0001,now);gain.gain.exponentialRampToValueAtTime(.028*volume*level/(index+1),now+.003+index*.012);gain.gain.exponentialRampToValueAtTime(.0001,now+.08+index*.025);oscillator.connect(gain);gain.connect(context.destination);oscillator.start(now);oscillator.stop(now+.11)})}catch{}}
 function spin(){
   if(state.busy)return;const stake=totalBet();if(!stake){setStatus('请先在桌面放置筹码');return}let result;
   try{result=secureNumber(37)}catch{setStatus('安全随机数暂不可用，本轮未扣款');return}
   state.busy=true;state.lastResult=null;render();setStatus('停止下注 · 轮盘旋转中');const index=ROULETTE_SEQUENCE.indexOf(result),base=Math.ceil(state.wheelRotation/360)*360+(REDUCED_MOTION.matches?360:1800);state.wheelRotation=base-index*stepAngle;
   const wheel=$('#roulette-wheel',roulette),ball=$('#ball-track',roulette);wheel.style.setProperty('--wheel-rotation',`${state.wheelRotation}deg`);wheel.style.setProperty('--wheel-counter-rotation',`${-state.wheelRotation}deg`);wheel.classList.add('spinning');ball.classList.remove('orbiting');void ball.offsetWidth;ball.classList.add('orbiting');const duration=REDUCED_MOTION.matches?180:4300;const tickTimer=REDUCED_MOTION.matches?null:setInterval(()=>playTone(260+secureNumber(5)*34,.025),110);
-  setTimeout(()=>{if(tickTimer)clearInterval(tickTimer);wheel.classList.remove('spinning');ball.classList.remove('orbiting');const settlement=settleBets(state.bets,result);state.balance=state.balance-settlement.stake+settlement.returned;state.history.unshift(result);state.history=state.history.slice(0,12);state.lastResult=result;state.busy=false;state.bets.clear();state.actions=[];saveState();render();if(settlement.returned){const winLabels=settlement.wins.map(win=>win.label).join('、');setStatus(`开出 ${result} · ${winLabels} 命中 · 返还 ${money(settlement.returned)} USD`);playTone(720,.35)}else{setStatus(`开出 ${result} · 本轮未中奖`);playTone(150,.35)}},duration);
+  setTimeout(()=>{if(tickTimer)clearInterval(tickTimer);wheel.classList.remove('spinning');ball.classList.remove('orbiting');const settlement=settleBets(state.bets,result);state.balance=state.balance-settlement.stake+settlement.returned;state.history.unshift(result);state.history=state.history.slice(0,12);state.lastResult=result;state.busy=false;state.bets.clear();state.stacks.clear();state.actions=[];saveState();render();if(settlement.returned){const winLabels=settlement.wins.map(win=>win.label).join('、');setStatus(`开出 ${result} · ${winLabels} 命中 · 返还 ${money(settlement.returned)} USD`);playTone(720,.35)}else{setStatus(`开出 ${result} · 本轮未中奖`);playTone(150,.35)}},duration);
 }
 function renderHistory(){const history=$('#roulette-history',roulette);history.replaceChildren();if(!state.history.length){history.innerHTML='<span class="history-empty">暂无</span>';return}state.history.forEach(number=>{const item=document.createElement('i');item.className=numberColor(number);item.textContent=number;history.append(item)})}
 function renderSummary(){const summary=$('#bet-summary',roulette);summary.replaceChildren();if(!state.bets.size){summary.innerHTML='<span>尚未下注</span>';return}[...state.bets].slice(0,7).forEach(([id,amount])=>{const bet=describeBet(id),item=document.createElement('span');item.innerHTML=`${bet.label} <b>${money(amount)}</b>`;summary.append(item)});if(state.bets.size>7){const more=document.createElement('span');more.textContent=`另有 ${state.bets.size-7} 注`;summary.append(more)}}
 function render(){
   const total=totalBet();$('#roulette-balance',roulette).textContent=money(state.balance-total);$('#roulette-total',roulette).textContent=money(total);$('#wheel-result',roulette).textContent=state.lastResult??'—';$('#wheel-result',roulette).className=state.lastResult===null?'':numberColor(state.lastResult);
   $$('.chip-choice',roulette).forEach(button=>{const selected=Number(button.dataset.value)===state.selectedChip;button.classList.toggle('selected',selected);button.setAttribute('aria-checked',String(selected));button.disabled=state.busy});
-  $$('[data-bet-id]',roulette).forEach(button=>{const amount=state.bets.get(button.dataset.betId)||0;button.classList.toggle('has-bet',amount>0);const output=$('.bet-amount',button);if(output)output.textContent=amount?money(amount):'';button.disabled=state.busy});
+  $$('[data-bet-id]',roulette).forEach(button=>{const id=button.dataset.betId,amount=state.bets.get(id)||0,stack=state.stacks.get(id)||[];button.classList.toggle('has-bet',amount>0);const output=$('.bet-amount',button),stackNode=$('.bet-stack',button);if(output)output.textContent=amount?money(amount):'';if(stackNode)stackNode.innerHTML=stack.slice(-5).map((value,index)=>chipArt(value,`table-chip stack-${index}`)).join('');button.disabled=state.busy});
   $('#roulette-undo',roulette).disabled=state.busy||!state.actions.length;$('#roulette-clear',roulette).disabled=state.busy||!state.bets.size;$('#roulette-spin',roulette).disabled=state.busy||!state.bets.size;$('#roulette-refill',roulette).hidden=state.balance>0||state.bets.size>0||state.busy;renderHistory();renderSummary();
 }
 
+function fruitBalance(){const request={balance:0};window.dispatchEvent(new CustomEvent('abyss:fruit-balance-request',{detail:request}));return request.balance}
+const shop=$('#roulette-shop',roulette),shopStatus=$('#shop-status',shop);
+function openShop(){if(state.busy)return;$('#fruit-shop-balance',shop).textContent=`${money(fruitBalance())} USD`;shopStatus.textContent='';shop.showModal()}
+$$('[data-fruit-cost]',shop).forEach(button=>button.onclick=()=>{const cost=Number(button.dataset.fruitCost),chips=cost*100,request={cost,accepted:false};window.dispatchEvent(new CustomEvent('abyss:buy-roulette-chips',{detail:request}));if(!request.accepted){shopStatus.textContent='水果机可用资金不足，或当前仍有锁定中的游戏金额。';return}state.balance+=chips;saveState();render();$('#fruit-shop-balance',shop).textContent=`${money(fruitBalance())} USD`;shopStatus.textContent=`兑换成功：获得 ${money(chips)} 轮盘筹码。`;playChipDrop();});
 buildTable();buildChipRack();$('#roulette-undo',roulette).onclick=undo;$('#roulette-clear',roulette).onclick=clearBets;$('#roulette-spin',roulette).onclick=spin;
-$('#roulette-refill',roulette).onclick=()=>{if(state.balance||state.busy)return;state.balance=25000;saveState();setStatus('已领取 25,000 USD 娱乐筹码');render()};
+$('.roulette-shop-button',roulette).onclick=openShop;$('#roulette-refill',roulette).onclick=openShop;$('.roulette-shop-close',shop).onclick=()=>shop.close();
+$('#table-collapse',roulette).onclick=event=>{state.tableCollapsed=!state.tableCollapsed;$('.roulette-layout',roulette).classList.toggle('table-collapsed',state.tableCollapsed);event.currentTarget.setAttribute('aria-expanded',String(!state.tableCollapsed));event.currentTarget.textContent=state.tableCollapsed?'展开下注台':'折叠下注台'};
 const rules=$('#roulette-rules',roulette);$('.roulette-rules-button',roulette).onclick=()=>rules.showModal();$('.roulette-rules-close',rules).onclick=()=>rules.close();$('.roulette-rules-confirm',rules).onclick=()=>rules.close();document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!rules.open&&document.body.classList.contains('mode-roulette'))showGateway('games')});render();
 showGateway('welcome');
