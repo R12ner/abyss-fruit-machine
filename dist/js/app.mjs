@@ -4,6 +4,17 @@ import {$,bindAcceleratingHold,ringPositions,setLed,sprite} from './ui/helpers.m
 
 const bonusNames={gift:'幸运送灯',train:'火车连奖',bigTriple:'大三元',smallTriple:'小三元',jackpot:'累积彩金'};
 const STORAGE_KEY='abyss-fruit-arcade-state-v2';
+const COIN_STYLE_KEY='abyss-fruit-arcade-coin-style-v1';
+const COIN_STYLES=Object.freeze({arcade:'街机币',bitcoin:'BTC',usdt:'USDT',usdc:'USDC'});
+let coinStyle=(()=>{try{const saved=localStorage.getItem(COIN_STYLE_KEY);return COIN_STYLES[saved]?saved:'arcade'}catch{return 'arcade'}})();
+const coinAsset=()=>`assets/coins/${coinStyle}.png`;
+function createCoinImage(){const coin=document.createElement('img');coin.src=coinAsset();coin.alt='';coin.dataset.coin='';return coin}
+function applyCoinStyle(style){
+  if(!COIN_STYLES[style])return;
+  coinStyle=style;try{localStorage.setItem(COIN_STYLE_KEY,style)}catch{}
+  document.querySelectorAll('img[data-coin]').forEach(coin=>coin.src=coinAsset());
+  const preview=document.querySelector('#coin-style-preview');if(preview)preview.src=coinAsset();
+}
 function loadGameState(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||'null')}catch{return null}}
 const game=createGame(loadGameState()),positions=ringPositions();
 route.forEach(([i,m],n)=>{
@@ -15,6 +26,13 @@ route.forEach(([i,m],n)=>{
 let step=1,subtract=false,current=0;
 const status=$('status'),start=$('start'),bets=$('bets'),dialog=$('rules-dialog');
 const {playCoinSound,playPrizeCue,tone}=createAudioEngine({settingsButton:$('sound')});
+const settingsDialog=document.querySelector('.settings-dialog'),audioNote=settingsDialog.querySelector('.audio-note');
+const coinSetting=document.createElement('div');coinSetting.className='coin-style-setting';
+coinSetting.innerHTML='<label for="coin-style"><span>硬币样式</span><small>投币、落币与出币槽</small></label><div class="coin-style-control"><img id="coin-style-preview" alt="" aria-hidden="true"><select id="coin-style" aria-label="选择硬币样式"></select></div>';
+audioNote.before(coinSetting);
+const coinSelect=coinSetting.querySelector('select');
+for(const [value,label] of Object.entries(COIN_STYLES)){const option=document.createElement('option');option.value=value;option.textContent=label;coinSelect.append(option)}
+coinSelect.value=coinStyle;coinSelect.onchange=()=>applyCoinStyle(coinSelect.value);applyCoinStyle(coinStyle);
 $('coin-chute').querySelector('.engraving')?.remove();
 const transferControls=document.createElement('div');
 transferControls.className='transfer-controls';
@@ -33,31 +51,44 @@ const tutorialParagraphs=[...dialog.querySelectorAll('p')];
 const stagingHelp=tutorialParagraphs.find(p=>p.textContent.includes('放币时金额暂存'));
 if(stagingHelp)stagingHelp.textContent='放币时金额暂存槽内，不会进入机台。可点击槽内位置选择数量，也可在投币口上方直接输入金额，再点击投币口一次投入；× 可全部拿回钱包。';
 const payoutHelp=tutorialParagraphs.find(p=>p.textContent.includes('清空押注后'));
-if(payoutHelp)payoutHelp.textContent='清空押注后拉下退币拉杆，CREDIT 会掉入中央出币槽。中奖与比倍所得先留在 WIN；按下启动时，WIN 会全部转入 CREDIT，再扣除本轮押注。中奖后用 CREDIT → WIN 可追加本轮比倍筹码，两个箭头按钮长按会逐渐加速。总金额归零时，系统会补贴 100 USD 到钱包。';
+if(payoutHelp)payoutHelp.textContent='清空押注后拉下退币拉杆，CREDIT 会逐枚掉入中央出币槽；再次退币会接着落下，已有硬币不会消失。点击出币槽才会领取全部金额。设置中可切换街机币、BTC、USDT 或 USDC 外观。中奖与比倍所得先留在 WIN；按下启动时，WIN 会全部转入 CREDIT，再扣除本轮押注。';
 const cashOutControl=$('cash-out');
 cashOutControl.className='cashout-lever';
 cashOutControl.setAttribute('aria-label','拉下退币拉杆');
 cashOutControl.innerHTML='<span class="lever-rail" aria-hidden="true"></span><span class="lever-handle" aria-hidden="true"></span>';
-let coinTimer,payoutAnimating=false;
+const MAX_VISIBLE_COINS=96;
+let coinTimer,payoutAnimating=false,coinAnimationEnd=0;
+function positionPayoutCoin(coin,index,{settled=false,delay=0}={}){
+  const columns=12,row=Math.floor(index/columns),column=index%columns;
+  coin.style.setProperty('--coin-left',`${5+column*(90/(columns-1))+(row%2?1.2:-1.2)}%`);
+  coin.style.setProperty('--coin-bottom',`${Math.min(72,row*10.5+(column%3)*1.2)}%`);
+  coin.style.setProperty('--coin-angle',`${(index*47)%96-48}deg`);
+  coin.style.setProperty('--coin-delay',`${delay}ms`);
+  coin.style.zIndex=String(2+row);
+  if(settled)coin.classList.add('coin-settled');
+  else coin.addEventListener('animationend',()=>coin.classList.add('coin-settled'),{once:true});
+}
 function ejectCoins(amount){
-  clearTimeout(coinTimer);const stream=$('coin-stream');stream.replaceChildren();payoutAnimating=true;
+  const stream=$('coin-stream'),existing=stream.children.length;
   $('coin-chute').classList.add('has-coins','dispensing');
   $('payout-label').textContent=`$${game.snapshot().payout.toLocaleString('zh-CN')} USD`;
-  const count=Math.min(18,game.snapshot().payout);
+  const fillingCount=Math.max(0,Math.min(MAX_VISIBLE_COINS,game.snapshot().payout)-existing);
+  const count=fillingCount||Math.min(amount,12);
+  const now=performance.now(),queuedDelay=Math.max(0,coinAnimationEnd-now),interval=count>60?24:count>24?38:70;
   for(let i=0;i<count;i++){
-    const coin=document.createElement('img');coin.src='assets/coin.png';coin.alt='';
-    coin.style.setProperty('--coin-delay',`${i*.08}s`);
-    coin.style.setProperty('--coin-x',`${(i%6-2.5)*11}px`);
-    coin.style.setProperty('--coin-y',`${Math.floor(i/6)*-4}px`);
-    coin.style.setProperty('--coin-angle',`${(i*37)%65-32}deg`);
+    const coin=createCoinImage();positionPayoutCoin(coin,existing+i,{delay:queuedDelay+i*interval});
     stream.append(coin);
   }
-  update();playCoinSound('out',count);
-  coinTimer=setTimeout(()=>{payoutAnimating=false;$('coin-chute').classList.remove('dispensing');update()},2400);
+  if(count){
+    payoutAnimating=true;clearTimeout(coinTimer);
+    coinAnimationEnd=now+queuedDelay+(count-1)*interval+1050;
+    coinTimer=setTimeout(()=>{payoutAnimating=false;$('coin-chute').classList.remove('dispensing');update()},Math.max(0,coinAnimationEnd-performance.now()));
+  }else $('coin-chute').classList.remove('dispensing');
+  update();playCoinSound('out',Math.min(count||amount,24));
 }
 for(let i=1;i<=20;i++){
   const position=document.createElement('button');position.className='tray-position';position.dataset.count=i;
-  position.innerHTML='<img src="assets/coin.png" alt="" aria-hidden="true">';
+  position.append(createCoinImage());
   position.onclick=()=>{
     if(game.stageCoins(i,step)){$('stage-amount').value='';update();status.textContent=`放币槽：${i} 枚 × ${step} USD`;tone(430+i*8,.05)}
   };
@@ -86,7 +117,7 @@ $('insert-coin').onclick=()=>{
   const state=game.snapshot(),amount=game.insertStaged();if(!amount)return;
   const feed=$('feeding-coins');feed.replaceChildren();
   for(let i=0;i<state.stagedCount;i++){
-    const coin=document.createElement('img');coin.src='assets/coin.png';coin.alt='';
+    const coin=createCoinImage();
     coin.style.setProperty('--feed-delay',`${i*.04}s`);feed.append(coin);
   }
   update();status.textContent=`已投入槽内全部 ${amount} USD`;playCoinSound('in',state.stagedCount);
@@ -189,10 +220,9 @@ function update(){
   });
   const payoutStream=$('coin-stream'),coinChute=$('coin-chute');
   if(state.payout>0&&!payoutAnimating&&!payoutStream.children.length){
-    coinChute.classList.add('has-coins','restored');
-    for(let i=0;i<Math.min(18,state.payout);i++){
-      const coin=document.createElement('img');coin.src='assets/coin.png';coin.alt='';
-      coin.style.setProperty('--coin-x',`${(i%6-2.5)*11}px`);coin.style.setProperty('--coin-y',`${Math.floor(i/6)*-4}px`);coin.style.setProperty('--coin-angle',`${(i*37)%65-32}deg`);payoutStream.append(coin);
+    coinChute.classList.add('has-coins');
+    for(let i=0;i<Math.min(MAX_VISIBLE_COINS,state.payout);i++){
+      const coin=createCoinImage();positionPayoutCoin(coin,i,{settled:true});payoutStream.append(coin);
     }
   }
   if(state.payout===0)coinChute.classList.remove('has-coins','restored');
@@ -292,7 +322,7 @@ function animate(){
   try{target=game.start()}catch{status.textContent='无法取得安全随机数，未扣分，请重试';return}
   if(target===null)return;
   clearAward();setLed('multiplier-led',0,3);$('result-symbol').replaceChildren();
-  tiles.forEach(t=>t.classList.remove('bonus-hit','train-head'));$('jackpot-display').classList.remove('jackpot-won');$('lucky-lamp').classList.remove('lit');$('lucky-lamp').textContent='LUCKY LIGHT / 幸运灯';$('round-detail').textContent='';$('guess-number').textContent='—';
+  tiles.forEach(t=>t.classList.remove('bonus-hit','train-head','train-moving'));$('jackpot-display').classList.remove('jackpot-won');$('lucky-lamp').classList.remove('lit');$('lucky-lamp').textContent='LUCKY LIGHT / 幸运灯';$('round-detail').textContent='';$('guess-number').textContent='—';
   const total=game.snapshot().total;update();status.textContent=`已扣 ${total} USD · 跑灯中`;
   const bonus=game.bonusPreview(),laps=bonus?.type?5:3;
   const distance=laps*24+(target-current+24)%24;let tick=0;
@@ -328,6 +358,24 @@ function spinBonusLight(target,laps,done){
   }
   frame();
 }
+function showTrainGroup(head,className){
+  tiles.forEach(tile=>tile.classList.remove('train-moving','train-head'));
+  for(let offset=0;offset<4;offset++){
+    const tile=tiles[(head+offset)%24];tile.classList.add(className);
+    if(offset===0)tile.classList.add('train-head');
+  }
+}
+function spinTrainLights(target,laps,done){
+  let head=target,tick=0;const distance=laps*24;
+  showTrainGroup(head,'train-moving');
+  function frame(){
+    head=(head+1)%24;showTrainGroup(head,'train-moving');tone(250+(head%8)*38,.028);tick++;
+    if(tick===distance){current=target;done();return}
+    const remaining=distance-tick;
+    setTimeout(frame,remaining>12?34:52+(12-remaining)*15);
+  }
+  setTimeout(frame,180);
+}
 function showBonus(){
   const bonus=game.bonusPreview();
   if(!bonus?.type){finishRound();return}
@@ -343,14 +391,32 @@ function showBonus(){
     });
     return;
   }
+  if(train){
+    const head=bonus.indices[0];
+    tiles[current].classList.remove('active');
+    tiles.forEach(tile=>tile.classList.remove('train-moving','train-head'));
+    tiles[head].classList.add('train-head');status.textContent=`火车头已选中 · ${head+1} 号灯`;
+    setTimeout(()=>{
+      showTrainGroup(head,'train-moving');status.textContent='火车车身灯已点亮 · 整列准备出发';tone(430,.18);
+      setTimeout(()=>{
+        status.textContent='火车连奖 · 4 盏灯一起跑动中';
+        spinTrainLights(head,3,()=>{
+          tiles.forEach(tile=>tile.classList.remove('train-moving','train-head'));
+          bonus.indices.forEach((index,offset)=>{tiles[index].classList.add('bonus-hit');if(offset===0)tiles[index].classList.add('train-head')});
+          tone(720,.28);status.textContent='火车连奖 · 4 盏灯已同时停下';setTimeout(finishRound,900);
+        });
+      },520);
+    },420);
+    return;
+  }
   const eventLabel=bonus.type==='bigTriple'?'大三元':bonus.type==='smallTriple'?'小三元':train?'火车进站':'幸运送灯';
   let n=0;
   function revealNext(){
     tiles.forEach(t=>t.classList.remove('train-head'));
     const target=bonus.indices[n];status.textContent=`${eventLabel} · 第 ${n+1} / ${bonus.indices.length} 灯跑动中`;
     spinBonusLight(target,1,()=>{
-      const tile=tiles[target];tile.classList.add('bonus-hit');if(train)tile.classList.add('train-head');
-      tone(train?300+n*70:560+n*90,.15);n++;
+      const tile=tiles[target];tile.classList.add('bonus-hit');
+      tone(560+n*90,.15);n++;
       if(n<bonus.indices.length)setTimeout(revealNext,320);
       else setTimeout(()=>{tiles.forEach(t=>t.classList.remove('train-head'));finishRound()},700);
     });

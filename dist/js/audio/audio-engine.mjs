@@ -108,10 +108,10 @@ export function createAudioEngine({settingsButton}){
 
   function createSettingsDialog(){
     settingsButton.id='settings';settingsButton.classList.replace('sound-button','settings-button');
-    settingsButton.removeAttribute('aria-pressed');settingsButton.setAttribute('aria-label','打开声音设置');
+    settingsButton.removeAttribute('aria-pressed');settingsButton.setAttribute('aria-label','打开游戏设置');
     settingsButton.innerHTML='<svg class="engraved-gear" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.3 3.2 10 1h4l.7 2.2 2 .8 2-1 2.8 2.8-1 2 .8 2L23 10v4l-2.2.7-.8 2 1 2-2.8 2.8-2-1-2 .8L14 23h-4l-.7-2.2-2-.8-2 1-2.8-2.8 1-2-.8-2L1 14v-4l2.2-.7.8-2-1-2L5.8 2.5l2 1z"/><circle cx="12" cy="12" r="3.2"/></svg>';
     const node=document.createElement('dialog');node.className='settings-dialog';
-    node.innerHTML='<button type="button" class="close settings-close" aria-label="关闭设置">×</button><span class="eyebrow">AUDIO CONSOLE</span><h2>声音设置</h2><div class="audio-setting"><label for="music-volume"><span>背景音乐</span><small>马林巴街机长循环</small></label><input id="music-volume" type="range" min="0" max="100" step="1"><output id="music-volume-value"></output></div><div class="audio-setting"><label for="sfx-volume"><span>游戏音效</span><small>投币、跑灯与奖项旋律</small></label><input id="sfx-volume" type="range" min="0" max="100" step="1"><output id="sfx-volume-value"></output></div><p class="audio-note">音乐会在首次操作后播放；调到 0 即可静音。</p><button type="button" class="confirm settings-confirm">完成</button>';
+    node.innerHTML='<button type="button" class="close settings-close" aria-label="关闭设置">×</button><span class="eyebrow">MACHINE CONSOLE</span><h2>游戏设置</h2><div class="audio-setting"><label for="music-volume"><span>背景音乐</span><small>马林巴街机长循环</small></label><input id="music-volume" type="range" min="0" max="100" step="1"><output id="music-volume-value"></output></div><div class="audio-setting"><label for="sfx-volume"><span>游戏音效</span><small>投币、跑灯与奖项旋律</small></label><input id="sfx-volume" type="range" min="0" max="100" step="1"><output id="sfx-volume-value"></output></div><p class="audio-note">音乐会在首次操作后播放；调到 0 即可静音。</p><button type="button" class="confirm settings-confirm">完成</button>';
     document.body.append(node);return node;
   }
 

@@ -94,10 +94,23 @@ button.coin-chute{
 .subsidy-dialog{text-align:center}.subsidy-dialog .eyebrow{display:block}.subsidy-confirm{margin-top:12px;padding:12px 20px;border:2px solid #d4c475;background:#626944;color:#fff3b9;box-shadow:0 4px #11170c;font-weight:bold}
 @media(max-width:750px){#jackpot-display .transfer-controls{gap:5px;margin-top:5px}.transfer-controls button{width:34px;height:25px;min-width:34px}.transfer-controls button::after{font-size:14px}.coin-bank{grid-template-columns:minmax(72px,.8fr) minmax(160px,2fr) 72px 40px auto}.slot-assembly{grid-template-rows:24px 78px 16px}.coin-amount-entry{width:68px}.coin-amount-entry input{padding:4px 2px;font-size:11px}}
 @media(max-width:560px){.coin-bank{grid-template-columns:1fr 72px 40px}}
-.coin-chute.restored #coin-stream img{animation:none;opacity:1;transform:translate(var(--coin-x),var(--coin-y)) rotateX(25deg) rotateZ(var(--coin-angle))}
-
 /* Gear-shaped audio console with independent music and effects channels. */
 .settings-button{--cap:#536b55;--cap-light:#90a385;--cap-dark:#293e2d}.engraved-gear{width:25px;height:25px;fill:none;stroke:#263626;stroke-width:1.8;filter:drop-shadow(0 1px 0 #a0ac86);stroke-linecap:round;stroke-linejoin:round}
 .settings-dialog{max-width:480px}.settings-dialog>.eyebrow{display:block;margin-bottom:5px}.settings-dialog h2{margin:7px 0 25px}.audio-setting{display:grid;grid-template-columns:minmax(140px,1fr) minmax(150px,1.5fr) 46px;align-items:center;gap:14px;padding:18px 0;border-top:1px solid #464b35}.audio-setting:last-of-type{border-bottom:1px solid #464b35}.audio-setting label span{display:block;color:#e2d99f;font-size:15px;font-weight:bold}.audio-setting label small{display:block;margin-top:5px;color:#888f73;font-size:11px}.audio-setting output{color:#d8ce8e;font-size:13px;text-align:right}.audio-setting input{width:100%;accent-color:#c8bc73;cursor:pointer}.audio-note{margin:18px 0;color:#8f957d!important;font-size:12px!important}.settings-confirm{margin-top:4px}
 @media(max-width:560px){.settings-dialog{padding:25px 20px}.audio-setting{grid-template-columns:1fr 45px;gap:10px}.audio-setting label{grid-column:1/3}.audio-setting input{grid-column:1}.audio-setting output{grid-column:2}}
 
+/* A train moves as one four-lamp block after its head is selected. */
+.tile.train-moving{border-color:#ffd681;background:#6f5529;box-shadow:0 0 14px #efaa59aa,inset 0 0 12px #ffd87a66}
+.tile.train-moving.train-head,.tile.train-head{border-color:#fff0b7;box-shadow:0 0 18px #ffd17e,inset 0 0 10px #fff2b755}
+
+/* Coin skin selector and persistent layered payout tray. */
+.coin-style-setting{display:grid;grid-template-columns:minmax(140px,1fr) minmax(150px,1.5fr) 46px;align-items:center;gap:14px;padding:18px 0;border-bottom:1px solid #464b35}
+.coin-style-setting label span{display:block;color:#e2d99f;font-size:15px;font-weight:bold}.coin-style-setting label small{display:block;margin-top:5px;color:#888f73;font-size:11px}
+.coin-style-control{grid-column:2/4;display:flex;align-items:center;gap:12px}.coin-style-control img{width:42px;height:42px;object-fit:contain;filter:drop-shadow(1px 2px 2px #0009)}
+.coin-style-control select{min-width:0;flex:1;padding:9px 28px 9px 10px;border:1px solid #666b4b;border-radius:3px;background:#11180f;color:#e4dda2;font:13px 'Courier New',monospace}
+#coin-stream img{left:calc(var(--coin-left) - 15px);bottom:var(--coin-bottom);transform-origin:center;animation:coin-pile-land 1s cubic-bezier(.45,.05,.68,.2) both;animation-delay:var(--coin-delay)}
+#coin-stream img.coin-settled{animation:none;opacity:1;transform:rotateX(25deg) rotateZ(var(--coin-angle))}
+@keyframes coin-pile-land{0%{opacity:0;transform:translateY(-110px) rotateX(10deg) rotateZ(-100deg)}12%{opacity:1}58%{transform:translateY(0) rotateX(50deg) rotateZ(150deg)}73%{transform:translateY(-13px) rotateX(20deg) rotateZ(190deg)}88%{transform:translateY(0) rotateX(35deg) rotateZ(215deg)}95%{transform:translateY(-3px) rotateX(15deg) rotateZ(var(--coin-angle))}100%{opacity:1;transform:rotateX(25deg) rotateZ(var(--coin-angle))}}
+@media(max-width:750px){#coin-stream img{left:calc(var(--coin-left) - 10px)}}
+@media(max-width:560px){.coin-style-setting{grid-template-columns:1fr}.coin-style-setting label,.coin-style-control{grid-column:1}.coin-style-control{width:100%}}
+@media(prefers-reduced-motion:reduce){#coin-stream img{animation:none;opacity:1;transform:rotate(var(--coin-angle))}}
