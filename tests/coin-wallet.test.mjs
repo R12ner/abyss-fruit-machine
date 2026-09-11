@@ -49,3 +49,19 @@ assert.equal(funded.startGamble('small',()=>6),true);assert.equal(funded.settleG
 const empty=createGame({version:2,wallet:0,credit:0,stagedAmount:0,stagedCount:0,stagedUnit:1,stagedDirect:false,payout:0,bets:Array(8).fill(0),previous:null,win:0,risk:0,guesses:0,jackpot:1000});
 assert.equal(empty.snapshot().totalFunds,0);assert.equal(empty.grantSubsidy(),100);assert.equal(empty.snapshot().wallet,100);assert.equal(empty.grantSubsidy(),0);
 console.log('Passed: staged quantities and direct entry, manual transfers, persistence restore, subsidy, payout collection, and five-account conservation.');
+// Starting a new round banks all prior WIN exactly once, before charging bets.
+const banked=createGame({version:2,wallet:17,credit:100,win:50000,risk:50000,guesses:2});
+banked.adjust(7,10);
+const before=banked.exportState();
+assert.throws(()=>banked.start(()=>24,none));
+assert.deepEqual(banked.exportState(),before);
+assert.equal(banked.start(()=>6,none),6);
+assert.equal(banked.snapshot().credit,50090);
+assert.equal(banked.snapshot().win,0);
+assert.equal(banked.snapshot().risk,0);
+assert.equal(banked.snapshot().guesses,0);
+assert.equal(banked.snapshot().wallet,17);
+assert.equal(banked.start(()=>6,none),null);
+assert.equal(banked.snapshot().credit,50090);
+banked.settle();assert.equal(banked.snapshot().win,50);
+assert.deepEqual(createGame(banked.exportState()).exportState(),banked.exportState());

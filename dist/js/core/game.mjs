@@ -104,6 +104,7 @@ const root=globalThis;
           new Set(bonus.indices).size!==count)throw new Error('Invalid bonus result');
         if(triples[bonus.type]&&!bonus.indices.every((v,i)=>v===triples[bonus.type][i]))throw new Error('Invalid triple');
         previous=[...bets];pending={index,bets:[...bets],bonus:{type:bonus.type,indices:[...bonus.indices]}};
+        credit+=win;win=0;
         credit-=sum(bets);jackpot+=Math.floor(sum(bets)/10);risk=0;guesses=0;return index;
       },
       bonusPreview(){return pending?{type:pending.bonus.type,indices:[...pending.bonus.indices]}:null},

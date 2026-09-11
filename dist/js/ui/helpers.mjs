@@ -1,6 +1,6 @@
 export const $=id=>document.getElementById(id);
 
-export const sprite=index=>`<span aria-hidden="true" class="sprite" style="background-position:${(index%4)*100/3}% ${index<4?22:74}%;--delay:-${index*.3}s"></span>`;
+export const sprite=index=>`<span aria-hidden="true" class="sprite${index===5?' papaya-sprite':''}" style="background-position:${(index%4)*100/3}% ${index<4?22:74}%;--delay:-${index*.3}s"></span>`;
 
 const SEGMENTS=['abcdef','bc','abdeg','abcdg','bcfg','acdfg','acdefg','abc','abcdefg','abcdfg'];
 export function setLed(id,value,digits=6){

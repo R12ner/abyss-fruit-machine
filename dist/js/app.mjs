@@ -33,7 +33,7 @@ const tutorialParagraphs=[...dialog.querySelectorAll('p')];
 const stagingHelp=tutorialParagraphs.find(p=>p.textContent.includes('放币时金额暂存'));
 if(stagingHelp)stagingHelp.textContent='放币时金额暂存槽内，不会进入机台。可点击槽内位置选择数量，也可在投币口上方直接输入金额，再点击投币口一次投入；× 可全部拿回钱包。';
 const payoutHelp=tutorialParagraphs.find(p=>p.textContent.includes('清空押注后'));
-if(payoutHelp)payoutHelp.textContent='清空押注后拉下退币拉杆，CREDIT 会掉入中央出币槽。中奖与比倍所得先留在 WIN；中奖后用 CREDIT → WIN 可追加本轮比倍筹码，两个箭头按钮长按会逐渐加速。总金额归零时，系统会补贴 100 USD 到钱包。';
+if(payoutHelp)payoutHelp.textContent='清空押注后拉下退币拉杆，CREDIT 会掉入中央出币槽。中奖与比倍所得先留在 WIN；按下启动时，WIN 会全部转入 CREDIT，再扣除本轮押注。中奖后用 CREDIT → WIN 可追加本轮比倍筹码，两个箭头按钮长按会逐渐加速。总金额归零时，系统会补贴 100 USD 到钱包。';
 const cashOutControl=$('cash-out');
 cashOutControl.className='cashout-lever';
 cashOutControl.setAttribute('aria-label','拉下退币拉杆');
