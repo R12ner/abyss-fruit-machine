@@ -5,7 +5,7 @@
   "description": "A modular, static 24-cell fruit machine game.",
   "scripts": {
     "serve": "python3 -m http.server 8000 --directory dist",
-    "test": "node tests/game.test.mjs && node tests/bonus.test.mjs && node tests/triples-jackpot.test.mjs && node tests/coin-wallet.test.mjs",
-    "check": "node --check dist/js/app.mjs && node --check dist/js/audio/audio-engine.mjs && node --check dist/js/audio/soundtrack.mjs && node --check dist/js/ui/helpers.mjs && node --check dist/js/core/game.mjs && npm test"
+    "test": "node tests/game.test.mjs && node tests/bonus.test.mjs && node tests/triples-jackpot.test.mjs && node tests/coin-wallet.test.mjs && node tests/roulette.test.mjs",
+    "check": "node --check dist/js/app.mjs && node --check dist/roulette.mjs && node --check dist/js/audio/audio-engine.mjs && node --check dist/js/audio/soundtrack.mjs && node --check dist/js/ui/helpers.mjs && node --check dist/js/core/game.mjs && node --check dist/js/core/roulette.mjs && npm test"
   }
 }

@@ -1,0 +1,67 @@
+export const ROULETTE_SEQUENCE=Object.freeze([0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26]);
+
+export const RED_NUMBERS=Object.freeze([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
+const redSet=new Set(RED_NUMBERS);
+
+export function numberColor(number){
+  if(number===0)return 'green';
+  return redSet.has(number)?'red':'black';
+}
+
+const range=(start,end)=>Array.from({length:end-start+1},(_,index)=>start+index);
+const sorted=(...numbers)=>numbers.flat().map(Number).sort((a,b)=>a-b);
+
+export function describeBet(id){
+  let match;
+  if((match=id.match(/^number-(\d+)$/))){
+    const number=Number(match[1]);
+    if(number>=0&&number<=36)return {id,label:`单号 ${number}`,numbers:[number],payout:35,type:'单号'};
+  }
+  if((match=id.match(/^split-(\d+)-(\d+)$/))){
+    const numbers=sorted(match[1],match[2]);
+    if(numbers.length===2&&numbers.every(n=>n>=0&&n<=36))return {id,label:`分注 ${numbers.join('·')}`,numbers,payout:17,type:'分注'};
+  }
+  if((match=id.match(/^street-(\d+)$/))){
+    const street=Number(match[1]);
+    if(street>=0&&street<12){const first=street*3+1;return {id,label:`街注 ${first}–${first+2}`,numbers:range(first,first+2),payout:11,type:'街注'}}
+  }
+  if(id==='trio-012')return {id,label:'三数 0·1·2',numbers:[0,1,2],payout:11,type:'三数'};
+  if(id==='trio-023')return {id,label:'三数 0·2·3',numbers:[0,2,3],payout:11,type:'三数'};
+  if((match=id.match(/^corner-(\d+)$/))){
+    const first=Number(match[1]);
+    if(first>=1&&first<=32&&first%3!==0)return {id,label:`角注 ${[first,first+1,first+3,first+4].join('·')}`,numbers:[first,first+1,first+3,first+4],payout:8,type:'角注'};
+  }
+  if(id==='basket')return {id,label:'首四 0·1·2·3',numbers:[0,1,2,3],payout:8,type:'首四'};
+  if((match=id.match(/^sixline-(\d+)$/))){
+    const street=Number(match[1]);
+    if(street>=0&&street<11){const first=street*3+1;return {id,label:`双街 ${first}–${first+5}`,numbers:range(first,first+5),payout:5,type:'双街'}}
+  }
+  if((match=id.match(/^dozen-([123])$/))){
+    const dozen=Number(match[1]),start=(dozen-1)*12+1;
+    return {id,label:`第 ${dozen} 打`,numbers:range(start,start+11),payout:2,type:'十二数区'};
+  }
+  if((match=id.match(/^column-([123])$/))){
+    const column=Number(match[1]);
+    return {id,label:`第 ${column} 列`,numbers:range(1,36).filter(n=>(n-1)%3===column-1),payout:2,type:'列注'};
+  }
+  if(id==='red'||id==='black')return {id,label:id==='red'?'红':'黑',numbers:range(1,36).filter(n=>numberColor(n)===id),payout:1,type:'颜色'};
+  if(id==='odd'||id==='even')return {id,label:id==='odd'?'单':'双',numbers:range(1,36).filter(n=>n%2===(id==='odd'?1:0)),payout:1,type:'单双'};
+  if(id==='low'||id==='high')return {id,label:id==='low'?'1–18':'19–36',numbers:id==='low'?range(1,18):range(19,36),payout:1,type:'大小'};
+  return null;
+}
+
+export function settleBets(entries,result){
+  if(!Number.isInteger(result)||result<0||result>36)throw new RangeError('Invalid roulette result');
+  let stake=0,returned=0;
+  const wins=[];
+  for(const [id,rawAmount] of entries){
+    const amount=Number(rawAmount),bet=describeBet(id);
+    if(!bet||!Number.isFinite(amount)||amount<=0)continue;
+    stake+=amount;
+    if(bet.numbers.includes(result)){
+      const value=amount*(bet.payout+1);
+      returned+=value;wins.push({...bet,amount,returned:value,profit:amount*bet.payout});
+    }
+  }
+  return {result,stake,returned,net:returned-stake,wins};
+}

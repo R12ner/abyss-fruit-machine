@@ -200,7 +200,7 @@ $('stage-amount').addEventListener('keydown',e=>{if(e.key==='Enter'&&!$('insert-
 function saveGameState(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(game.exportState()))}catch{}}
 function update(){
   const state=game.snapshot();
-  if(!state.busy&&state.totalFunds===0&&!subsidyDialog.open)subsidyDialog.showModal();
+  if(!state.busy&&state.totalFunds===0&&!subsidyDialog.open&&!document.body.classList.contains('arcade-menu-open')&&!document.body.classList.contains('mode-roulette'))subsidyDialog.showModal();
   $('wallet').textContent=state.wallet.toLocaleString('zh-CN');
   const directInput=$('stage-amount'),rawDirectAmount=directInput.value.trim(),directAmount=Number(rawDirectAmount),validDirectAmount=rawDirectAmount!==''&&Number.isInteger(directAmount)&&directAmount>0&&directAmount<=state.wallet+state.staged;
   $('insert-value').textContent=`$${validDirectAmount?directAmount:state.staged}`;
@@ -452,5 +452,6 @@ $('collect').onclick=()=>{if(game.collect()){update();status.textContent='已收
 start.onclick=animate;
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.repeat&&e.target===document.body){e.preventDefault();animate()}});
 update();
+document.addEventListener('abyss:show-fruit',update);
 
 setLed('multiplier-led',0,3);
