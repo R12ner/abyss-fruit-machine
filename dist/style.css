@@ -114,3 +114,8 @@ button.coin-chute{
 @media(max-width:750px){#coin-stream img{left:calc(var(--coin-left) - 10px)}}
 @media(max-width:560px){.coin-style-setting{grid-template-columns:1fr}.coin-style-setting label,.coin-style-control{grid-column:1}.coin-style-control{width:100%}}
 @media(prefers-reduced-motion:reduce){#coin-stream img{animation:none;opacity:1;transform:rotate(var(--coin-angle))}}
+
+/* Independent QWERTYUI keyboard betting for all eight fruit stations. */
+.bet-station{position:relative}.fruit-key{position:absolute;z-index:4;top:29px;right:max(0px,calc(50% - 39px));min-width:22px;padding:3px 5px;border:1px solid #777656;border-radius:3px;background:linear-gradient(#34382a,#161b14);box-shadow:0 2px #090d08;color:#d8ce91;font:700 11px/1 "Courier New",monospace;text-align:center;pointer-events:none}.bet-station.key-active .fruit-key{border-color:#f0d67a;background:#75652e;color:#fff2b2;box-shadow:0 0 9px #e4ca69}.bet-station.key-active .fruit-button{filter:brightness(1.22);box-shadow:0 0 0 3px #d7c26b,0 0 14px #e5cd6d88,inset 2px 2px 2px #fff4,inset 0 -7px 3px #0006,0 5px #090d08}
+.keyboard-map{display:flex;flex-wrap:wrap;gap:4px}.keyboard-map kbd{min-width:24px;padding:4px;border:1px solid #777656;border-radius:3px;background:#171d14;color:#ddcf91;text-align:center;box-shadow:0 2px #090d08}
+@media(max-width:750px){.fruit-key{top:25px;right:max(0px,calc(50% - 34px));font-size:9px;min-width:19px;padding:3px}}

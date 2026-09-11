@@ -3,6 +3,7 @@ import {createGame,route,symbols} from './core/game.mjs';
 import {$,bindAcceleratingHold,ringPositions,setLed,sprite} from './ui/helpers.mjs';
 
 const bonusNames={gift:'幸运送灯',train:'火车连奖',bigTriple:'大三元',smallTriple:'小三元',jackpot:'累积彩金'};
+const FRUIT_KEYS=Object.freeze(['q','w','e','r','t','y','u','i']);
 const STORAGE_KEY='abyss-fruit-arcade-state-v2';
 const COIN_STYLE_KEY='abyss-fruit-arcade-coin-style-v1';
 const COIN_STYLES=Object.freeze({arcade:'街机币',bitcoin:'BTC',usdt:'USDT',usdc:'USDC'});
@@ -175,13 +176,41 @@ function adjust(i,remove){
   status.textContent=remove?'−':'+';update();tone(350+i*55,.045);return true;
 }
 symbols.forEach(([name,payout],i)=>{
-  const station=document.createElement('div');station.className='bet-station';
+  const station=document.createElement('div');station.className='bet-station';station.dataset.key=FRUIT_KEYS[i];
   station.innerHTML=`<span class="payout" aria-hidden="true">×${payout}</span>`;
   const button=document.createElement('button');button.className='bet arcade-button fruit-button';
   button.innerHTML=sprite(i);
   bindAcceleratingHold(button,e=>adjust(i,subtract||e.shiftKey));
-  button.oncontextmenu=e=>{e.preventDefault();adjust(i,true)};station.append(button);const counter=document.createElement('output');counter.className='bet-count';counter.textContent='00';counter.setAttribute('aria-label',name+'押分');station.append(counter);bets.append(station);
+  button.oncontextmenu=e=>{e.preventDefault();adjust(i,true)};station.append(button);const key=document.createElement('kbd');key.className='fruit-key';key.textContent=FRUIT_KEYS[i].toUpperCase();key.setAttribute('aria-hidden','true');station.append(key);const counter=document.createElement('output');counter.className='bet-count';counter.textContent='00';counter.setAttribute('aria-label',name+'押分');station.append(counter);bets.append(station);
 });
+const keyboardHelp=document.createElement('div');
+keyboardHelp.innerHTML='<span class="keyboard-map" aria-hidden="true"><kbd>Q</kbd><kbd>W</kbd><kbd>E</kbd><kbd>R</kbd><kbd>T</kbd><kbd>Y</kbd><kbd>U</kbd><kbd>I</kbd></span><p><b>键盘八键下注</b><br>Q、W、E、R、T、Y、U、I 依次对应八个水果。可同时按住多个键，各按键会独立连续加注。</p>';
+dialog.querySelector('.tutorial-map')?.prepend(keyboardHelp);
+const keyHolds=new Map();
+function stopKeyHold(key){
+  const hold=keyHolds.get(key);if(!hold)return;
+  clearTimeout(hold.timer);keyHolds.delete(key);bets.children[hold.index]?.classList.remove('key-active');
+}
+function stopAllKeyHolds(){for(const key of [...keyHolds.keys()])stopKeyHold(key)}
+function canUseFruitKeyboard(target){
+  const typing=target instanceof HTMLElement&&(target.matches('input,textarea,select')||target.isContentEditable);
+  return !typing&&!document.querySelector('dialog[open]')&&!document.body.classList.contains('arcade-menu-open')&&!document.body.classList.contains('mode-roulette')&&!game.snapshot().busy;
+}
+function repeatKeyBet(key){
+  const hold=keyHolds.get(key);if(!hold)return;
+  if(!canUseFruitKeyboard(document.body)||adjust(hold.index,false)===false){stopKeyHold(key);return}
+  const elapsed=performance.now()-hold.started;
+  hold.timer=setTimeout(()=>repeatKeyBet(key),Math.max(38,170-elapsed/13));
+}
+document.addEventListener('keydown',event=>{
+  const key=event.key.toLowerCase(),index=FRUIT_KEYS.indexOf(key);
+  if(index<0||event.ctrlKey||event.metaKey||event.altKey||event.repeat||keyHolds.has(key)||!canUseFruitKeyboard(event.target))return;
+  event.preventDefault();if(adjust(index,false)===false)return;
+  const hold={index,started:performance.now(),timer:0};keyHolds.set(key,hold);bets.children[index]?.classList.add('key-active');hold.timer=setTimeout(()=>repeatKeyBet(key),420);
+});
+document.addEventListener('keyup',event=>{const key=event.key.toLowerCase();if(keyHolds.has(key)){event.preventDefault();stopKeyHold(key)}});
+window.addEventListener('blur',stopAllKeyHolds);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopAllKeyHolds()});
 function transferAmount(direction,amount){
   const moved=game.transfer(direction,amount);if(!moved)return false;
   update();const state=game.snapshot();status.textContent=direction==='winToCredit'?`WIN → CREDIT：${moved} USD`:`CREDIT → WIN：${moved} USD${state.risk>0?' · 比倍筹码已增至 '+state.risk+' USD':''}`;tone(direction==='winToCredit'?560:430,.035);return true;
@@ -200,6 +229,7 @@ $('stage-amount').addEventListener('keydown',e=>{if(e.key==='Enter'&&!$('insert-
 function saveGameState(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(game.exportState()))}catch{}}
 function update(){
   const state=game.snapshot();
+  if(state.busy)stopAllKeyHolds();
   if(!state.busy&&state.totalFunds===0&&!subsidyDialog.open&&!document.body.classList.contains('arcade-menu-open')&&!document.body.classList.contains('mode-roulette'))subsidyDialog.showModal();
   $('wallet').textContent=state.wallet.toLocaleString('zh-CN');
   const directInput=$('stage-amount'),rawDirectAmount=directInput.value.trim(),directAmount=Number(rawDirectAmount),validDirectAmount=rawDirectAmount!==''&&Number.isInteger(directAmount)&&directAmount>0&&directAmount<=state.wallet+state.staged;
@@ -237,7 +267,7 @@ function update(){
   [...bets.querySelectorAll('.bet')].forEach((button,i)=>{
     button.classList.toggle('chosen',state.bets[i]>0);
     button.parentElement.querySelector('.bet-count').textContent=String(state.bets[i]).padStart(2,'0');
-    button.setAttribute('aria-label',`${symbols[i][0]}，已押 ${state.bets[i]} USD，${subtract?'减':'加'}注 ${step} USD`);
+    button.setAttribute('aria-label',`${symbols[i][0]}，键盘 ${FRUIT_KEYS[i].toUpperCase()}，已押 ${state.bets[i]} USD，${subtract?'减':'加'}注 ${step} USD`);
     button.disabled=state.busy;
   });
   $('total').textContent=String(state.total).padStart(3,'0');
