@@ -44,9 +44,13 @@ stageEntry.innerHTML='<span>投币金额</span><input id="stage-amount" type="nu
 document.querySelector('.slot-assembly').prepend(stageEntry);
 const subsidyDialog=document.createElement('dialog');
 subsidyDialog.className='subsidy-dialog';
-subsidyDialog.innerHTML='<span class="eyebrow">HOUSE SUPPORT</span><h2>补贴已到账</h2><p>总金额已归零，游戏厅补贴的 100 USD 已放入钱包。</p><button type="button" class="subsidy-confirm">领取 100 USD</button>';
+subsidyDialog.innerHTML='<span class="eyebrow">HOUSE SUPPORT</span><h2>补贴待领取</h2><p>总金额已归零。领取后，游戏厅会把 100 USD 补贴立即存入钱包。</p><button type="button" class="subsidy-confirm">领取 100 USD</button>';
 document.body.append(subsidyDialog);
-subsidyDialog.querySelector('button').onclick=()=>subsidyDialog.close();
+subsidyDialog.addEventListener('cancel',event=>event.preventDefault());
+subsidyDialog.querySelector('button').onclick=()=>{
+  if(!game.grantSubsidy())return;
+  saveGameState();subsidyDialog.close();update();status.textContent='已领取破产补贴 100 USD';
+};
 const tutorialParagraphs=[...dialog.querySelectorAll('p')];
 const stagingHelp=tutorialParagraphs.find(p=>p.textContent.includes('放币时金额暂存'));
 if(stagingHelp)stagingHelp.textContent='放币时金额暂存槽内，不会进入机台。可点击槽内位置选择数量，也可在投币口上方直接输入金额，再点击投币口一次投入；× 可全部拿回钱包。';
@@ -195,11 +199,8 @@ $('stage-amount').addEventListener('input',refreshInsertAvailability);
 $('stage-amount').addEventListener('keydown',e=>{if(e.key==='Enter'&&!$('insert-coin').disabled){e.preventDefault();$('insert-coin').click()}});
 function saveGameState(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(game.exportState()))}catch{}}
 function update(){
-  let state=game.snapshot();
-  if(!state.busy&&state.totalFunds===0&&game.grantSubsidy()){
-    state=game.snapshot();
-    if(!subsidyDialog.open)subsidyDialog.showModal();
-  }
+  const state=game.snapshot();
+  if(!state.busy&&state.totalFunds===0&&!subsidyDialog.open)subsidyDialog.showModal();
   $('wallet').textContent=state.wallet.toLocaleString('zh-CN');
   const directInput=$('stage-amount'),rawDirectAmount=directInput.value.trim(),directAmount=Number(rawDirectAmount),validDirectAmount=rawDirectAmount!==''&&Number.isInteger(directAmount)&&directAmount>0&&directAmount<=state.wallet+state.staged;
   $('insert-value').textContent=`$${validDirectAmount?directAmount:state.staged}`;
