@@ -7,8 +7,10 @@ const FRUIT_KEYS=Object.freeze(['q','w','e','r','t','y','u','i']);
 const STORAGE_KEY='abyss-fruit-arcade-state-v2';
 const COIN_STYLE_KEY='abyss-fruit-arcade-coin-style-v1';
 const KEY_HINT_KEY='abyss-fruit-key-hints-v1';
+const ROULETTE_HINT_KEY='abyss-roulette-bet-hints-v1';
 const COIN_STYLES=Object.freeze({arcade:'街机币',bitcoin:'BTC',usdt:'USDT',usdc:'USDC'});
 let showKeyHints=(()=>{try{return localStorage.getItem(KEY_HINT_KEY)!=='off'}catch{return true}})();
+let showRouletteHints=(()=>{try{return localStorage.getItem(ROULETTE_HINT_KEY)!=='off'}catch{return true}})();
 let coinStyle=(()=>{try{const saved=localStorage.getItem(COIN_STYLE_KEY);return COIN_STYLES[saved]?saved:'arcade'}catch{return 'arcade'}})();
 const coinAsset=()=>`assets/coins/${coinStyle}.png`;
 function createCoinImage(){const coin=document.createElement('img');coin.src=coinAsset();coin.alt='';coin.dataset.coin='';return coin}
@@ -42,6 +44,12 @@ audioNote.before(keyHintSetting);
 const keyHintToggle=keyHintSetting.querySelector('input');
 function applyKeyHints(enabled){showKeyHints=enabled;document.body.classList.toggle('hide-fruit-key-hints',!enabled);keyHintToggle.checked=enabled;try{localStorage.setItem(KEY_HINT_KEY,enabled?'on':'off')}catch{}}
 keyHintToggle.onchange=()=>applyKeyHints(keyHintToggle.checked);applyKeyHints(showKeyHints);
+const rouletteHintSetting=document.createElement('label');rouletteHintSetting.className='key-hint-setting';
+rouletteHintSetting.innerHTML='<span><b>轮盘落点提示</b><small>显示分注、角注和双街的小圆点</small></span><input type="checkbox" role="switch" aria-label="显示轮盘落点提示"><i aria-hidden="true"></i>';
+audioNote.before(rouletteHintSetting);
+const rouletteHintToggle=rouletteHintSetting.querySelector('input');
+function applyRouletteHints(enabled){showRouletteHints=enabled;document.body.classList.toggle('hide-roulette-bet-hints',!enabled);rouletteHintToggle.checked=enabled;try{localStorage.setItem(ROULETTE_HINT_KEY,enabled?'on':'off')}catch{}}
+rouletteHintToggle.onchange=()=>applyRouletteHints(rouletteHintToggle.checked);applyRouletteHints(showRouletteHints);
 $('coin-chute').querySelector('.engraving')?.remove();
 const transferControls=document.createElement('div');
 transferControls.className='transfer-controls';
@@ -235,20 +243,20 @@ function refreshInsertAvailability(){
 $('stage-amount').addEventListener('input',refreshInsertAvailability);
 $('stage-amount').addEventListener('keydown',e=>{if(e.key==='Enter'&&!$('insert-coin').disabled){e.preventDefault();$('insert-coin').click()}});
 function saveGameState(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(game.exportState()))}catch{}}
-window.addEventListener('abyss:fruit-balance-request',event=>{if(event.detail)event.detail.balance=game.snapshot().exchangeable});
+window.addEventListener('abyss:fruit-balance-request',event=>{if(event.detail)event.detail.balance=game.snapshot().wallet});
 window.addEventListener('abyss:buy-roulette-chips',event=>{
   const request=event.detail;if(!request)return;
   const spent=game.spend(request.cost);request.accepted=spent===request.cost;
   if(!request.accepted)return;
   saveGameState();update();status.textContent=`已在筹码商店消费 ${spent} USD`;
-  window.dispatchEvent(new CustomEvent('abyss:fruit-balance-changed',{detail:{balance:game.snapshot().exchangeable}}));
+  window.dispatchEvent(new CustomEvent('abyss:fruit-balance-changed',{detail:{balance:game.snapshot().wallet}}));
 });
 window.addEventListener('abyss:sell-roulette-chips',event=>{
   const request=event.detail;if(!request)return;
   const deposited=game.deposit(request.amount);request.accepted=deposited===request.amount;
   if(!request.accepted)return;
   saveGameState();update();status.textContent=`自助出售筹码：钱包增加 ${deposited} USD`;
-  window.dispatchEvent(new CustomEvent('abyss:fruit-balance-changed',{detail:{balance:game.snapshot().exchangeable}}));
+  window.dispatchEvent(new CustomEvent('abyss:fruit-balance-changed',{detail:{balance:game.snapshot().wallet}}));
 });
 function update(){
   const state=game.snapshot();

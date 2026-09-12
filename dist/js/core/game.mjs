@@ -88,13 +88,8 @@ const root=globalThis;
         wallet=100;return 100;
       },
       spend(amount){
-        if(busy()||!Number.isInteger(amount)||amount<=0||amount>exchangeable())return 0;
-        let remaining=amount;
-        const take=value=>{const used=Math.min(value,remaining);remaining-=used;return value-used};
-        wallet=take(wallet);stagedAmount=take(stagedAmount);
-        if(stagedAmount===0){stagedCount=0;stagedDirect=false}else{stagedCount=Math.min(20,stagedAmount);stagedUnit=1;stagedDirect=true}
-        const locked=sum(bets),freeCredit=Math.max(0,credit-locked),creditLeft=take(freeCredit);credit=locked+creditLeft;
-        win=take(win);risk=Math.min(risk,win);return amount;
+        if(busy()||!Number.isInteger(amount)||amount<=0||amount>wallet)return 0;
+        wallet-=amount;return amount;
       },
       deposit(amount){
         if(busy()||!Number.isInteger(amount)||amount<=0)return 0;

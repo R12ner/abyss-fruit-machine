@@ -19,6 +19,7 @@ assert.equal(win.returned,5*36+25*2+100*3);
 assert.equal(win.net,400);
 
 const zero=settleBets(new Map([['red',25],['even',25],['low',25],['number-0',1]]),0);
-assert.equal(zero.returned,36);
-assert.equal(zero.net,-40);
+assert.equal(zero.returned,73.5);
+assert.equal(zero.net,-2.5);
+assert.equal(zero.wins.filter(item=>item.laPartage).length,3);
 console.log('roulette tests passed');

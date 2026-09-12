@@ -58,7 +58,9 @@ export function settleBets(entries,result){
     const amount=Number(rawAmount),bet=describeBet(id);
     if(!bet||!Number.isFinite(amount)||amount<=0)continue;
     stake+=amount;
-    if(bet.numbers.includes(result)){
+    if(result===0&&['red','black','odd','even','low','high'].includes(id)){
+      const value=amount/2;returned+=value;wins.push({...bet,label:`${bet.label} · 平分`,amount,returned:value,profit:-value,laPartage:true});
+    }else if(bet.numbers.includes(result)){
       const value=amount*(bet.payout+1);
       returned+=value;wins.push({...bet,amount,returned:value,profit:amount*bet.payout});
     }

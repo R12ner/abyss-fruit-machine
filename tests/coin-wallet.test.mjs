@@ -49,13 +49,12 @@ assert.equal(funded.snapshot().win,60);assert.equal(funded.snapshot().risk,60);
 assert.equal(funded.startGamble('small',()=>6),true);assert.equal(funded.settleGamble().win,120);
 const empty=createGame({version:2,wallet:0,credit:0,stagedAmount:0,stagedCount:0,stagedUnit:1,stagedDirect:false,payout:0,bets:Array(8).fill(0),previous:null,win:0,risk:0,guesses:0,jackpot:1000});
 assert.equal(empty.snapshot().totalFunds,0);assert.equal(empty.grantSubsidy(),100);assert.equal(empty.snapshot().wallet,100);assert.equal(empty.grantSubsidy(),0);
-// The casino shop can spend only unlocked fruit-machine funds and preserves active bets.
+// The casino shop can spend only WALLET money and preserves every other account.
 const shop=createGame();shop.stageAmount(80);shop.insertStaged();shop.adjust(7,10);shop.transfer('creditToWin',20);
-assert.equal(shop.snapshot().exchangeable,90);assert.equal(shop.spend(75),75);
-assert.equal(shop.snapshot().wallet,0);assert.equal(shop.snapshot().credit,10);assert.equal(shop.snapshot().bets[7],10);assert.equal(shop.snapshot().win,15);
-assert.equal(shop.snapshot().totalFunds,25);assert.equal(shop.snapshot().exchangeable,15);assert.equal(shop.spend(16),0);
-assert.equal(shop.spend(15),15);assert.equal(shop.snapshot().exchangeable,0);assert.equal(shop.snapshot().totalFunds,10);
-assert.equal(shop.deposit(25),25);assert.equal(shop.snapshot().wallet,25);assert.equal(shop.snapshot().exchangeable,25);assert.equal(shop.snapshot().totalFunds,35);
+assert.equal(shop.snapshot().wallet,20);assert.equal(shop.spend(21),0);assert.equal(shop.spend(15),15);
+assert.equal(shop.snapshot().wallet,5);assert.equal(shop.snapshot().credit,60);assert.equal(shop.snapshot().bets[7],10);assert.equal(shop.snapshot().win,20);
+assert.equal(shop.spend(6),0);assert.equal(shop.spend(5),5);assert.equal(shop.snapshot().wallet,0);assert.equal(shop.snapshot().totalFunds,80);
+assert.equal(shop.deposit(25),25);assert.equal(shop.snapshot().wallet,25);assert.equal(shop.snapshot().exchangeable,95);assert.equal(shop.snapshot().totalFunds,105);
 assert.equal(shop.deposit(0),0);assert.equal(shop.deposit(1.5),0);
 console.log('Passed: staged quantities and direct entry, manual transfers, persistence restore, subsidy, payout collection, and five-account conservation.');
 // Starting a new round banks all prior WIN exactly once, before charging bets.
