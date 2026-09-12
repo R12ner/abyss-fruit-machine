@@ -23,12 +23,12 @@ function loadState(){
     const stacks=new Map(Object.entries(saved?.stacks||{}).filter(([id,stack])=>describeBet(id)&&Array.isArray(stack)).map(([id,stack])=>[id,stack.filter(value=>CHIP_VALUES.includes(value))]));
     const selectedChip=CHIP_VALUES.includes(saved?.selectedChip)?saved.selectedChip:1;
     const previousStacks=new Map(Object.entries(saved?.previousStacks||{}).filter(([id,stack])=>describeBet(id)&&Array.isArray(stack)).map(([id,stack])=>[id,stack.filter(value=>CHIP_VALUES.includes(value))]));
-    return {inventory,payoutTray,stacks,previousStacks,selectedChip,history:Array.isArray(saved?.history)?saved.history.slice(0,12):Array.isArray(legacy?.history)?legacy.history.slice(0,12):[],tableCollapsed:Boolean(saved?.tableCollapsed),halfCredit:saved?.halfCredit===.5?.5:0};
-  }catch{return {inventory:CHIP_VALUES.map(()=>0),payoutTray:[],stacks:new Map(),previousStacks:new Map(),selectedChip:1,history:[],tableCollapsed:false,halfCredit:0}}
+    return {inventory,payoutTray,stacks,previousStacks,selectedChip,dealerChip:CHIP_VALUES.includes(saved?.dealerChip)?saved.dealerChip:null,history:Array.isArray(saved?.history)?saved.history.slice(0,12):Array.isArray(legacy?.history)?legacy.history.slice(0,12):[],tableCollapsed:Boolean(saved?.tableCollapsed),halfCredit:saved?.halfCredit===.5?.5:0};
+  }catch{return {inventory:CHIP_VALUES.map(()=>0),payoutTray:[],stacks:new Map(),previousStacks:new Map(),selectedChip:1,dealerChip:null,history:[],tableCollapsed:false,halfCredit:0}}
 }
 
 const loaded=loadState(),state={...loaded,bets:new Map([...loaded.stacks].map(([id,stack])=>[id,stack.reduce((sum,value)=>sum+value,0)])),actions:[],busy:false,lastResult:null,wheelRotation:0};
-function saveState(){try{localStorage.setItem(STORE_KEY,JSON.stringify({inventory:state.inventory,payoutTray:state.payoutTray,stacks:Object.fromEntries(state.stacks),previousStacks:Object.fromEntries(state.previousStacks),selectedChip:state.selectedChip,history:state.history,tableCollapsed:state.tableCollapsed,halfCredit:state.halfCredit}))}catch{}}
+function saveState(){try{localStorage.setItem(STORE_KEY,JSON.stringify({inventory:state.inventory,payoutTray:state.payoutTray,stacks:Object.fromEntries(state.stacks),previousStacks:Object.fromEntries(state.previousStacks),selectedChip:state.selectedChip,dealerChip:state.dealerChip,history:state.history,tableCollapsed:state.tableCollapsed,halfCredit:state.halfCredit}))}catch{}}
 
 function chipArt(value,extra='',extraStyle=''){
   if(value===.5)return `<span class="chip-art half-chip ${extra}" style="${extraStyle}" aria-hidden="true">½</span>`;
@@ -83,7 +83,7 @@ roulette.innerHTML=`
     <div class="roulette-layout">
       <section class="wheel-panel" aria-label="轮盘">
         <div class="wheel-crown"><div class="roulette-pointer" aria-hidden="true"></div><div class="roulette-wheel" id="roulette-wheel"><div class="wheel-disc" id="wheel-disc"></div><div class="ball-track" id="ball-track"><i class="roulette-ball"></i></div><div class="wheel-hub"><span>ABYSS</span><b id="wheel-result">—</b></div></div></div>
-        <section class="roulette-payout" id="roulette-payout" aria-label="待领取中奖筹码"><div><span>荷官赔付</span><output id="payout-total">0</output></div><p id="payout-empty">中奖筹码会放在这里</p><div class="payout-chip-pile" id="payout-chip-pile"></div></section>
+        <section class="roulette-payout" id="roulette-payout" aria-label="待领取中奖筹码"><div><span>荷官赔付</span><button type="button" id="dealer-talk">与荷官对话</button><output id="payout-total">0</output></div><p id="payout-empty">中奖筹码会放在这里</p><div class="payout-chip-pile" id="payout-chip-pile"></div></section>
         <div class="recent-results"><span>最近开奖</span><div id="roulette-history"></div><button type="button" id="roulette-refill" hidden>前往筹码商店</button></div>
       </section>
       <section class="betting-panel" aria-label="轮盘下注桌">
@@ -108,7 +108,8 @@ roulette.innerHTML=`
     <section class="shop-pane" data-shop-pane="buy"><p>点击一种筹码购买一枚，筹码面额就是消耗的水果机模拟 USD。</p><div class="shop-chips" id="shop-chips"></div></section>
     <section class="shop-pane" data-shop-pane="sell" hidden><p>点击一种筹码投入柜台并出售一枚，或者一次出售筹码槽中的全部筹码。</p><div class="shop-chips" id="sell-chips"></div><button type="button" id="sell-all-chips">一键出售全部筹码</button></section>
     <p id="shop-status" class="shop-status" aria-live="polite"></p>
-  </dialog>`;
+  </dialog>
+  <dialog id="dealer-dialog" class="dealer-dialog"><button type="button" class="close dealer-close" aria-label="关闭">×</button><span class="rules-kicker">DEALER PREFERENCE</span><h2>与荷官对话</h2><p>请优先给我：</p><div id="dealer-chip-options" class="dealer-chip-options"></div><p id="dealer-message">只显示您当前已有的筹码面值。</p><button type="button" class="dealer-done">完成</button></dialog>`;
 document.body.append(roulette);
 
 function showGateway(screen='games'){
@@ -162,7 +163,7 @@ function convertChips(fromValue,toValue){
   else{const count=toValue/fromValue;if(!Number.isInteger(count)||state.inventory[from]<count){setStatus(`需要 ${count} 枚 ${money(fromValue)} 筹码才能合成 1 枚 ${money(toValue)} 筹码`);return}state.inventory[from]-=count;state.inventory[to]++;setStatus(`已将 ${count} 枚 ${money(fromValue)} 筹码合为 1 枚 ${money(toValue)} 筹码`)}
   state.selectedChip=toValue;saveState();render();playExchangeSound();
 }
-function chipsForAmount(amount){const chips=[];for(let index=CHIP_VALUES.length-1;index>=0;index--)while(amount>=CHIP_VALUES[index]){chips.push(CHIP_VALUES[index]);amount-=CHIP_VALUES[index]}if(amount>=.5)chips.push(.5);return chips}
+function chipsForAmount(amount,preferred=state.dealerChip){const chips=[];if(CHIP_VALUES.includes(preferred))while(amount>=preferred){chips.push(preferred);amount-=preferred}for(let index=CHIP_VALUES.length-1;index>=0;index--)while(amount>=CHIP_VALUES[index]){chips.push(CHIP_VALUES[index]);amount-=CHIP_VALUES[index]}if(amount>=.5)chips.push(.5);return chips}
 function setStack(id,stack){if(stack.length)state.stacks.set(id,stack);else state.stacks.delete(id);const total=stack.reduce((sum,value)=>sum+value,0);if(total)state.bets.set(id,total);else state.bets.delete(id)}
 function adjustBet(id,remove=false){
   if(state.busy||!describeBet(id))return;const amount=state.selectedChip,stack=[...(state.stacks.get(id)||[])];
@@ -213,18 +214,20 @@ function render(){
 }
 
 function fruitBalance(){const request={balance:0};window.dispatchEvent(new CustomEvent('abyss:fruit-balance-request',{detail:request}));return request.balance}
-const shop=$('#roulette-shop',roulette);document.body.append(shop);const shopStatus=$('#shop-status',shop);let shopMode='buy';
+const shop=$('#roulette-shop',roulette);document.body.append(shop);const dealerDialog=$('#dealer-dialog',roulette);document.body.append(dealerDialog);const shopStatus=$('#shop-status',shop);let shopMode='buy';
 function setShopMode(mode){shopMode=mode;$$('[data-shop-mode]',shop).forEach(button=>{const active=button.dataset.shopMode===mode;button.classList.toggle('active',active);button.setAttribute('aria-selected',String(active))});$$('[data-shop-pane]',shop).forEach(pane=>pane.hidden=pane.dataset.shopPane!==mode)}
 function sellChips(value,count){const index=CHIP_VALUES.indexOf(value),quantity=Math.min(count,state.inventory[index]);if(quantity<=0)return false;const amount=value*quantity,request={amount,accepted:false};window.dispatchEvent(new CustomEvent('abyss:sell-roulette-chips',{detail:request}));if(!request.accepted)return false;state.inventory[index]-=quantity;saveState();render();playCashRegister();return amount}
 function renderShop(){const balance=fruitBalance();$('#fruit-shop-balance',shop).textContent=`${money(balance)} USD`;$$('[data-chip-buy]',shop).forEach(button=>{const value=Number(button.dataset.chipBuy),count=state.inventory[CHIP_VALUES.indexOf(value)];button.disabled=value>balance;$('.shop-owned',button).textContent=count?`已拥有 ${count} 枚`:'尚未拥有'});$$('[data-chip-sell]',shop).forEach(button=>{const value=Number(button.dataset.chipSell),count=state.inventory[CHIP_VALUES.indexOf(value)];button.disabled=count===0;$('.shop-owned',button).textContent=count?`可出售 ${count} 枚`:'空'});$('#sell-all-chips',shop).disabled=inventoryTotal()===0;setShopMode(shopMode)}
 function buildShop(){const buyRack=$('#shop-chips',shop),sellRack=$('#sell-chips',shop);CHIP_VALUES.forEach(value=>{const buy=document.createElement('button');buy.type='button';buy.dataset.chipBuy=value;buy.setAttribute('aria-label',`购买一枚 ${money(value)} 筹码，价格 ${money(value)} USD`);buy.innerHTML=`<span class="shop-chip-stack">${chipArt(value,'shop-chip')}</span><b>${money(value)}</b><span>购买一枚</span><small>${money(value)} USD</small><em class="shop-owned"></em>`;buy.onclick=()=>{const request={cost:value,accepted:false};window.dispatchEvent(new CustomEvent('abyss:buy-roulette-chips',{detail:request}));if(!request.accepted){shopStatus.textContent='水果机 WALLET 余额不足。';renderShop();return}const index=CHIP_VALUES.indexOf(value);state.inventory[index]++;state.selectedChip=value;saveState();render();renderShop();shopStatus.textContent=`已购买一枚 ${money(value)} 筹码。`;playChipDrop()};buyRack.append(buy);const sell=document.createElement('button');sell.type='button';sell.dataset.chipSell=value;sell.setAttribute('aria-label',`出售一枚 ${money(value)} 筹码`);sell.innerHTML=`<span class="shop-chip-stack">${chipArt(value,'shop-chip')}</span><b>${money(value)}</b><span>投入并出售一枚</span><small>换回 ${money(value)} USD</small><em class="shop-owned"></em>`;sell.onclick=()=>{const sold=sellChips(value,1);shopStatus.textContent=sold?`已出售一枚 ${money(value)} 筹码，水果机钱包增加 ${money(sold)} USD。`:'暂时无法出售这枚筹码。';renderShop()};sellRack.append(sell)})}
 function openShop(mode='buy'){if(state.busy)return;shopMode=mode;shopStatus.textContent='';renderShop();shop.showModal()}
+function openDealerDialog(){const options=$('#dealer-chip-options',dealerDialog);options.replaceChildren();CHIP_VALUES.forEach((value,index)=>{if(state.inventory[index]<=0)return;const button=document.createElement('button');button.type='button';button.dataset.dealerChip=value;button.classList.toggle('selected',state.dealerChip===value);button.setAttribute('aria-pressed',String(state.dealerChip===value));button.setAttribute('aria-label',`优先获得 ${money(value)} 面值筹码`);button.innerHTML=chipArt(value,'dealer-chip')+`<span>${money(value)}</span>`;button.onclick=()=>{state.dealerChip=value;saveState();openDealerDialog();$('#dealer-message',dealerDialog).textContent=`荷官：好的，赔付时优先给您 ${money(value)} 面值的筹码。`};options.append(button)});if(!options.children.length)options.innerHTML='<span class="dealer-empty">当前没有可选择的筹码面值</span>';if(!dealerDialog.open)dealerDialog.showModal()}
 buildShop();
 buildTable();buildChipRack();$('#roulette-undo',roulette).onclick=undo;$('#roulette-clear',roulette).onclick=clearBets;$('#roulette-repeat',roulette).onclick=repeatLast;$('#quick-bet-apply',roulette).onclick=()=>placeCallBet($('#quick-bet',roulette).value);$('#roulette-spin',roulette).onclick=spin;
 $('#payout-chip-pile',roulette).onclick=event=>{const button=event.target.closest('[data-payout-index]');if(!button)return;const index=Number(button.dataset.payoutIndex),value=state.payoutTray[index];if(!CHIP_VALUES.includes(value)&&value!==.5)return;state.payoutTray.splice(index,1);if(value===.5){state.halfCredit+=.5;if(state.halfCredit>=1){state.halfCredit-=1;state.inventory[0]++;state.selectedChip=1}}else{state.inventory[CHIP_VALUES.indexOf(value)]++;state.selectedChip=value}saveState();render();setStatus(value===.5?'已领取半枚筹码；两枚半筹码会自动合为 1':`已领取一枚 ${money(value)} 筹码`);playChipPickup()};
 $$('[data-shop-mode]',shop).forEach(button=>button.onclick=()=>{shopMode=button.dataset.shopMode;shopStatus.textContent='';renderShop()});
 $('#sell-all-chips',shop).onclick=()=>{const total=inventoryTotal();if(!total)return;const request={amount:total,accepted:false};window.dispatchEvent(new CustomEvent('abyss:sell-roulette-chips',{detail:request}));if(!request.accepted){shopStatus.textContent='当前暂时无法出售筹码。';return}state.inventory.fill(0);saveState();render();renderShop();shopStatus.textContent=`已一键出售全部筹码，水果机钱包增加 ${money(total)} USD。`;playCashRegister()};
 $('.roulette-shop-button',roulette).onclick=()=>openShop('buy');$('.roulette-settings-button',roulette).onclick=()=>document.querySelector('#settings')?.click();$('#roulette-refill',roulette).onclick=()=>openShop('buy');$('.gateway-sell',gateway).onclick=()=>openShop('sell');$('.roulette-shop-close',shop).onclick=()=>shop.close();
+$('#dealer-talk',roulette).onclick=openDealerDialog;$('.dealer-close',dealerDialog).onclick=()=>dealerDialog.close();$('.dealer-done',dealerDialog).onclick=()=>dealerDialog.close();
 $('#table-collapse',roulette).onclick=()=>{state.tableCollapsed=!state.tableCollapsed;saveState();render()};
 const rules=$('#roulette-rules',roulette);$('.roulette-rules-button',roulette).onclick=()=>rules.showModal();$('.roulette-rules-close',rules).onclick=()=>rules.close();$('.roulette-rules-confirm',rules).onclick=()=>rules.close();document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!rules.open&&document.body.classList.contains('mode-roulette'))showGateway('games')});render();
 showGateway('welcome');
