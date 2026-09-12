@@ -32,8 +32,7 @@ function saveState(){try{localStorage.setItem(STORE_KEY,JSON.stringify({inventor
 
 function chipArt(value,extra='',extraStyle=''){
   if(value===.5)return `<span class="chip-art half-chip ${extra}" style="${extraStyle}" aria-hidden="true">½</span>`;
-  const index=CHIP_VALUES.indexOf(value),x=index%4,y=Math.floor(index/4);
-  return `<span class="chip-art ${extra}" style="--chip-x:${x*33.333}%;--chip-y:${y?65:26}%;${extraStyle}" aria-hidden="true"></span>`;
+  return `<span class="chip-art ${extra}" style="background-image:url('assets/chips/individual/chip-${value}.png');${extraStyle}" aria-hidden="true"></span>`;
 }
 
 const gateway=document.createElement('section');
