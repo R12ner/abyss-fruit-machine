@@ -8,6 +8,44 @@ export function numberColor(number){
   return redSet.has(number)?'red':'black';
 }
 
+const DEALER_INTEL_TYPES=Object.freeze(['color','range','parity','dozen','column','exact']);
+
+export function dealerTipChance(value){
+  if(!Number.isFinite(value)||value<=0)return 0;
+  if(value>=10000)return .22;
+  if(value>=5000)return .15;
+  if(value>=1000)return .08;
+  if(value>=500)return .05;
+  if(value>=100)return .025;
+  if(value>=25)return .01;
+  if(value>=5)return .005;
+  return .002;
+}
+
+export function describeDealerIntel(result,type){
+  if(!Number.isInteger(result)||result<0||result>36||!DEALER_INTEL_TYPES.includes(type))return null;
+  if(type==='color')return result===0?'下一局的颜色……会是绿色。':`下一局的颜色……会是${numberColor(result)==='red'?'红色':'黑色'}。`;
+  if(type==='range')return result===0?'下一局……不会落在 1–36。':`下一局……会落在 ${result<=18?'1–18':'19–36'}。`;
+  if(type==='parity')return result===0?'下一局……既不是单，也不是双。':`下一局……会是${result%2?'单数':'双数'}。`;
+  if(type==='dozen')return result===0?'下一局……不在任何十二数区里。':`下一局……会落在第 ${Math.ceil(result/12)} 打。`;
+  if(type==='column')return result===0?'下一局……不在三列之中。':`下一局……会落在第 ${(result-1)%3+1} 列。`;
+  return `下一局……盯紧 ${result} 号。`;
+}
+
+export function createDealerIntel(tip,draw){
+  const chance=dealerTipChance(tip);
+  if(!chance||draw(10000)>=Math.round(chance*10000))return null;
+  const result=draw(37),ticket=draw(100);
+  const type=ticket<34?'color':ticket<58?'range':ticket<75?'parity':ticket<87?'dozen':ticket<95?'column':'exact';
+  return {result,type,message:describeDealerIntel(result,type),tip,chance};
+}
+
+export function restoreDealerIntel(value){
+  if(!value||!Number.isFinite(value.tip)||value.tip<=0)return null;
+  const message=describeDealerIntel(value.result,value.type);
+  return message?{result:value.result,type:value.type,message,tip:value.tip,chance:dealerTipChance(value.tip)}:null;
+}
+
 const range=(start,end)=>Array.from({length:end-start+1},(_,index)=>start+index);
 const sorted=(...numbers)=>numbers.flat().map(Number).sort((a,b)=>a-b);
 
