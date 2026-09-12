@@ -1,3 +1,7 @@
+import {DEALER_INTEL_TRUTH_CHANCES,DEALER_SAYINGS,dealerLieReveal} from '../games/roulette/dealer-dialogue.mjs';
+
+export {DEALER_INTEL_TRUTH_CHANCES,DEALER_SAYINGS,dealerLieReveal};
+
 export const ROULETTE_SEQUENCE=Object.freeze([0,32,15,19,4,21,2,25,17,34,6,27,13,36,11,30,8,23,10,5,24,16,33,1,20,14,31,9,22,18,29,7,28,12,35,3,26]);
 
 export const RED_NUMBERS=Object.freeze([1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]);
@@ -9,6 +13,10 @@ export function numberColor(number){
 }
 
 const DEALER_INTEL_TYPES=Object.freeze(['color','range','parity','dozen','column','exact']);
+
+export function dealerIntelTruthChance(type){
+  return DEALER_INTEL_TYPES.includes(type)?DEALER_INTEL_TRUTH_CHANCES[type]:0;
+}
 
 export function dealerTipChance(value){
   if(!Number.isFinite(value)||value<=0)return 0;
@@ -32,18 +40,46 @@ export function describeDealerIntel(result,type){
   return `下一局……盯紧 ${result} 号。`;
 }
 
+function dealerIntelMeaning(result,type){
+  if(type==='color')return numberColor(result);
+  if(type==='range')return result===0?'zero':result<=18?'low':'high';
+  if(type==='parity')return result===0?'zero':result%2?'odd':'even';
+  if(type==='dozen')return result===0?'zero':Math.ceil(result/12);
+  if(type==='column')return result===0?'zero':(result-1)%3+1;
+  return result;
+}
+
+export function dealerIntelMatchesResult(intel,result=intel?.result){
+  if(!intel||!DEALER_INTEL_TYPES.includes(intel.type)||!Number.isInteger(intel.claimResult)||!Number.isInteger(result))return false;
+  return dealerIntelMeaning(intel.claimResult,intel.type)===dealerIntelMeaning(result,intel.type);
+}
+
 export function createDealerIntel(tip,draw){
   const chance=dealerTipChance(tip);
   if(!chance||draw(10000)>=Math.round(chance*10000))return null;
   const result=draw(37),ticket=draw(100);
   const type=ticket<34?'color':ticket<58?'range':ticket<75?'parity':ticket<87?'dozen':ticket<95?'column':'exact';
-  return {result,type,message:describeDealerIntel(result,type),tip,chance};
+  const truthChance=dealerIntelTruthChance(type),truthful=draw(10000)<Math.round(truthChance*10000);
+  let claimResult=result,lieLineIndex=null;
+  if(!truthful){
+    const alternatives=Array.from({length:37},(_,number)=>number).filter(number=>dealerIntelMeaning(number,type)!==dealerIntelMeaning(result,type));
+    claimResult=alternatives[draw(alternatives.length)];
+    lieLineIndex=draw(DEALER_SAYINGS.falseIntel.length);
+  }
+  return {result,claimResult,type,truthful,truthChance,message:describeDealerIntel(claimResult,type),lieLineIndex,revealMessage:truthful?null:dealerLieReveal(lieLineIndex),tip,chance};
 }
 
 export function restoreDealerIntel(value){
   if(!value||!Number.isFinite(value.tip)||value.tip<=0)return null;
-  const message=describeDealerIntel(value.result,value.type);
-  return message?{result:value.result,type:value.type,message,tip:value.tip,chance:dealerTipChance(value.tip)}:null;
+  const truthful=value.truthful!==false,claimResult=Number.isInteger(value.claimResult)?value.claimResult:value.result;
+  const message=describeDealerIntel(claimResult,value.type),candidate={claimResult,type:value.type};
+  if(!message||!Number.isInteger(value.result)||value.result<0||value.result>36||dealerIntelMatchesResult(candidate,value.result)!==truthful)return null;
+  const lieLineIndex=truthful?null:Number.isInteger(value.lieLineIndex)?value.lieLineIndex:0;
+  return {result:value.result,claimResult,type:value.type,truthful,truthChance:dealerIntelTruthChance(value.type),message,lieLineIndex,revealMessage:truthful?null:dealerLieReveal(lieLineIndex),tip:value.tip,chance:dealerTipChance(value.tip)};
+}
+
+export function isRouletteBankrupt({walletBalance,inventoryTotal,betTotal,payoutTotal,halfCredit,busy=false}={}){
+  return !busy&&[walletBalance,inventoryTotal,betTotal,payoutTotal,halfCredit].every(value=>Number.isFinite(value)&&value===0);
 }
 
 export function groupPayoutChips(values){

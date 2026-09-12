@@ -85,7 +85,7 @@ const root=globalThis;
       },
       grantSubsidy(){
         if(busy()||totalFunds()!==0)return 0;
-        wallet=100;return 100;
+        wallet=10;return 10;
       },
       spend(amount){
         if(busy()||!Number.isInteger(amount)||amount<=0||amount>wallet)return 0;

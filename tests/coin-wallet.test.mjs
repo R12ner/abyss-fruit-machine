@@ -48,7 +48,7 @@ assert.equal(funded.snapshot().risk,50);assert.equal(funded.transfer('creditToWi
 assert.equal(funded.snapshot().win,60);assert.equal(funded.snapshot().risk,60);
 assert.equal(funded.startGamble('small',()=>6),true);assert.equal(funded.settleGamble().win,120);
 const empty=createGame({version:2,wallet:0,credit:0,stagedAmount:0,stagedCount:0,stagedUnit:1,stagedDirect:false,payout:0,bets:Array(8).fill(0),previous:null,win:0,risk:0,guesses:0,jackpot:1000});
-assert.equal(empty.snapshot().totalFunds,0);assert.equal(empty.grantSubsidy(),100);assert.equal(empty.snapshot().wallet,100);assert.equal(empty.grantSubsidy(),0);
+assert.equal(empty.snapshot().totalFunds,0);assert.equal(empty.grantSubsidy(),10);assert.equal(empty.snapshot().wallet,10);assert.equal(empty.grantSubsidy(),0);
 // The casino shop can spend only WALLET money and preserves every other account.
 const shop=createGame();shop.stageAmount(80);shop.insertStaged();shop.adjust(7,10);shop.transfer('creditToWin',20);
 assert.equal(shop.snapshot().wallet,20);assert.equal(shop.spend(21),0);assert.equal(shop.spend(15),15);

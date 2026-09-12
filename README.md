@@ -1,6 +1,6 @@
-# 深渊水果机 · ABYSS ARCADE
+# 深渊赌场 · ABYSS ARCADE
 
-模块化实现的 24 格八门水果机。使用模拟 USD，不支持充值、提现或兑换。
+模块化的静态街机赌场，目前包含 24 格八门水果机和单零欧式轮盘。使用模拟 USD，不支持充值、提现或兑换。
 
 - 在线游戏：https://abyss-fruit-arcade.omiku-9996.chatgpt.site
 - GitHub：https://github.com/R12ner/abyss-fruit-machine
@@ -13,22 +13,48 @@ dist/
 │   ├── coins/              # 街机币、BTC、USDT、USDC 独立素材
 │   └── fruits/             # 独立水果素材
 ├── js/
-│   ├── audio/
-│   │   ├── audio-engine.mjs # Web Audio、音量设置和音效播放
-│   │   └── soundtrack.mjs   # 马林巴背景编曲与各奖项旋律数据
+│   ├── bootstrap.mjs        # 组合注册表、赌场大厅与游戏模块
+│   ├── casino/
+│   │   ├── game-registry.mjs # 游戏注册与 enter/leave 生命周期
+│   │   ├── shell.mjs         # 赌场入口、大厅卡片和游戏切换
+│   │   └── wallet.mjs        # 跨游戏共享钱包接口
 │   ├── core/
-│   │   └── game.mjs         # 资金、押注、奖项、彩金和比倍规则
-│   ├── ui/
-│   │   └── helpers.mjs      # LED、图案、环形坐标和长按控件
-│   └── app.mjs              # 游戏流程与页面事件编排
+│   │   ├── game.mjs          # 水果机纯规则
+│   │   └── roulette.mjs      # 轮盘纯规则
+│   └── games/
+│       ├── fruit/            # 水果机清单、生命周期、UI 与音频
+│       └── roulette/         # 轮盘清单、生命周期与交互
 ├── app.js                   # 兼容启动器
-├── game.js                  # 旧入口兼容说明
 ├── index.html
-└── style.css
+├── style.css                # 水果机样式
+└── roulette.css             # 轮盘与赌场大厅样式
 tests/                       # 核心规则和资金守恒测试
 ```
 
 音乐由 `soundtrack.mjs` 中的音符数据驱动，并由 `audio-engine.mjs` 在浏览器内实时合成，因此不依赖隐藏的 MP3 文件。修改编曲、奖项旋律和音频引擎时互不影响。
+
+## 新增游戏模块
+
+新游戏放入独立的 `dist/js/games/<game-id>/` 目录，并导出一份游戏定义：
+
+```js
+export const coinPusherGameDefinition = {
+  id: 'coin-pusher',
+  badge: 'PUSHER 01',
+  title: '深渊推币机',
+  subtitle: 'COIN PUSHER',
+  art: '<span class="coin-pusher-card-art"></span>',
+  create({wallet, openLobby}) {
+    return {
+      enter() {},
+      leave() {},
+      lobbyActions: []
+    };
+  }
+};
+```
+
+然后只需在 `bootstrap.mjs` 导入并调用 `registry.register(...)`。推币机可通过公共 `wallet.balance()`、`wallet.spend(amount)` 和 `wallet.deposit(amount)` 使用同一模拟钱包，不需要依赖水果机或轮盘内部实现。
 
 ## 本地运行
 
@@ -53,7 +79,9 @@ npm run check
 
 设置中可以隐藏水果按钮上的键盘提示，隐藏后快捷键仍然有效。轮盘下注台可手动折叠，筹码落桌会播放碰撞音并按下注次数堆叠显示。轮盘的八个筹码槽默认为空，需在筹码商店按面额逐枚购买；一枚筹码消耗等额的水果机模拟 USD。中奖筹码会在荷官赔付区按同面额、同颜色归堆；可逐枚点击领取，也可长按一枚进入扫取模式，随后滑动触碰到的筹码会连续收入对应口袋。赌场菜单的自助出售柜台支持逐枚或一键出售筹码槽库存。筹码库存、未领取赔付与桌面押注都会在离开轮盘时保存。
 
-给荷官小费有小概率触发下一局内幕彩蛋。触发率随单枚小费面额提升并设有上限；命中彩蛋后，会按不同概率透露下一局的颜色、数字区间、单双、十二数区、列或精确号码。精确号码最稀有，已经获得的内幕会一直保留到下一次实际旋转。
+给荷官小费有小概率触发下一局内幕彩蛋。触发率随单枚小费面额提升并设有上限；命中彩蛋后，会按不同概率透露下一局的颜色、数字区间、单双、十二数区、列或精确号码。颜色消息大概率为真，其他类型各有独立可信度，假消息会在开奖后由荷官承认。真假概率和全部荷官台词集中在 `dist/js/games/roulette/dealer-dialogue.mjs`，可直接修改。已经获得的内幕会一直保留到下一次实际旋转。
+
+破产保护：水果机全部资产归零后可领取 10 USD；赌场钱包与轮盘内的筹码、下注和待领取赔付全部归零后，可领取一枚 1 USD 轮盘筹码。
 
 特殊事件包括幸运送灯、火车连奖、大三元、小三元和累积彩金。送灯和三元逐灯开奖；火车先确定车头，再让连续 4 盏灯组成整列一起跑动、一起停下。中奖所得先进入 WIN，可转至 CREDIT，也可把 CREDIT 追加到本轮比倍筹码。比倍小为 1–7，大为 8–14，最多连续五次。
 
