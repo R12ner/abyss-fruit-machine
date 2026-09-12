@@ -46,6 +46,12 @@ export function restoreDealerIntel(value){
   return message?{result:value.result,type:value.type,message,tip:value.tip,chance:dealerTipChance(value.tip)}:null;
 }
 
+export function groupPayoutChips(values){
+  const counts=new Map();
+  for(const value of values)if(Number.isFinite(value)&&value>0)counts.set(value,(counts.get(value)||0)+1);
+  return [...counts].sort((a,b)=>b[0]-a[0]).map(([value,count])=>({value,count}));
+}
+
 const range=(start,end)=>Array.from({length:end-start+1},(_,index)=>start+index);
 const sorted=(...numbers)=>numbers.flat().map(Number).sort((a,b)=>a-b);
 

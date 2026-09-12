@@ -1,4 +1,4 @@
-import {ROULETTE_SEQUENCE,createDealerIntel,describeBet,numberColor,restoreDealerIntel,settleBets} from './js/core/roulette.mjs';
+import {ROULETTE_SEQUENCE,createDealerIntel,describeBet,groupPayoutChips,numberColor,restoreDealerIntel,settleBets} from './js/core/roulette.mjs';
 
 const CHIP_VALUES=[1,5,25,100,500,1000,5000,10000];
 const CALL_BETS=Object.freeze({
@@ -83,7 +83,7 @@ roulette.innerHTML=`
     <div class="roulette-layout">
       <section class="wheel-panel" aria-label="轮盘">
         <div class="wheel-crown"><div class="roulette-pointer" aria-hidden="true"></div><div class="roulette-wheel" id="roulette-wheel"><div class="wheel-disc" id="wheel-disc"></div><div class="ball-track" id="ball-track"><i class="roulette-ball"></i></div><div class="wheel-hub"><span>ABYSS</span><b id="wheel-result">—</b></div></div></div>
-        <section class="roulette-payout" id="roulette-payout" aria-label="待领取中奖筹码"><div><span>荷官赔付</span><button type="button" id="dealer-talk">与荷官对话</button><output id="payout-total">0</output></div><p id="payout-empty">中奖筹码会放在这里</p><div class="payout-chip-pile" id="payout-chip-pile"></div></section>
+        <section class="roulette-payout" id="roulette-payout" aria-label="待领取中奖筹码"><div><span>荷官赔付</span><button type="button" id="dealer-talk">与荷官对话</button><output id="payout-total">0</output></div><p id="payout-empty">中奖筹码会放在这里</p><p id="payout-gesture-hint" class="payout-gesture-hint" hidden>同色筹码已归堆 · 点按领取，或长按后滑过筹码连续收入袋口</p><div class="payout-chip-pile" id="payout-chip-pile"></div></section>
         <div class="recent-results"><span>最近开奖</span><div id="roulette-history"></div><button type="button" id="roulette-refill" hidden>前往筹码商店</button></div>
       </section>
       <section class="betting-panel" aria-label="轮盘下注桌">
@@ -206,10 +206,13 @@ function spin(){
 }
 function renderHistory(){const history=$('#roulette-history',roulette);history.replaceChildren();if(!state.history.length){history.innerHTML='<span class="history-empty">暂无</span>';return}state.history.forEach(number=>{const item=document.createElement('i');item.className=numberColor(number);item.textContent=number;history.append(item)})}
 function renderPayout(){
-  const pile=$('#payout-chip-pile',roulette),total=state.payoutTray.reduce((sum,value)=>sum+value,0),visible=state.payoutTray.slice(0,240);
-  $('#payout-total',roulette).textContent=total?`${money(total)} 筹码`:'0';$('#payout-empty',roulette).hidden=state.payoutTray.length>0;pile.replaceChildren();
-  visible.forEach((value,index)=>{const button=document.createElement('button');button.type='button';button.dataset.payoutIndex=index;button.style.setProperty('--payout-lift',`${index%3*-2}px`);button.style.setProperty('--payout-angle',`${(index%5-2)*3}deg`);button.setAttribute('aria-label',`领取一枚 ${money(value)} 筹码`);button.innerHTML=chipArt(value,'payout-chip');pile.append(button)});
-  if(state.payoutTray.length>visible.length){const more=document.createElement('span');more.className='payout-more';more.textContent=`另有 ${money(state.payoutTray.length-visible.length)} 枚，领取后继续显示`;pile.append(more)}
+  const pile=$('#payout-chip-pile',roulette),total=payoutTotal(),groups=groupPayoutChips(state.payoutTray);
+  $('#payout-total',roulette).textContent=total?`${money(total)} 筹码`:'0';$('#payout-empty',roulette).hidden=state.payoutTray.length>0;$('#payout-gesture-hint',roulette).hidden=!state.payoutTray.length;pile.replaceChildren();
+  groups.forEach(({value,count})=>{
+    const group=document.createElement('section'),visible=Math.min(count,12);group.className='payout-chip-stack';group.dataset.payoutGroup=value;group.style.setProperty('--payout-visible',visible);group.setAttribute('aria-label',`${money(value)} 筹码，共 ${money(count)} 枚`);
+    for(let layer=0;layer<visible;layer++){const button=document.createElement('button');button.type='button';button.dataset.payoutValue=value;button.dataset.payoutLayer=layer;button.style.setProperty('--payout-layer',layer);button.setAttribute('aria-label',`领取一枚 ${money(value)} 筹码`);button.innerHTML=chipArt(value,'payout-chip');group.append(button)}
+    const badge=document.createElement('output');badge.className='payout-stack-count';badge.dataset.payoutCount=value;badge.textContent=`×${money(count)}`;group.append(badge);pile.append(group);
+  });
 }
 function renderSummary(){const summary=$('#bet-summary',roulette);summary.replaceChildren();if(!state.bets.size){summary.innerHTML='<span>尚未下注</span>';return}[...state.bets].slice(0,7).forEach(([id,amount])=>{const bet=describeBet(id),item=document.createElement('span');item.innerHTML=`${bet.label} <b>${money(amount)}</b>`;summary.append(item)});if(state.bets.size>7){const more=document.createElement('span');more.textContent=`另有 ${state.bets.size-7} 注`;summary.append(more)}}
 function render(){
@@ -229,6 +232,21 @@ function renderShop(){const balance=fruitBalance();$('#fruit-shop-balance',shop)
 function buildShop(){const buyRack=$('#shop-chips',shop),sellRack=$('#sell-chips',shop);CHIP_VALUES.forEach(value=>{const buy=document.createElement('button');buy.type='button';buy.dataset.chipBuy=value;buy.setAttribute('aria-label',`购买一枚 ${money(value)} 筹码，价格 ${money(value)} USD`);buy.innerHTML=`<span class="shop-chip-stack">${chipArt(value,'shop-chip')}</span><b>${money(value)}</b><span>购买一枚</span><small>${money(value)} USD</small><em class="shop-owned"></em>`;buy.onclick=()=>{const request={cost:value,accepted:false};window.dispatchEvent(new CustomEvent('abyss:buy-roulette-chips',{detail:request}));if(!request.accepted){shopStatus.textContent='水果机 WALLET 余额不足。';renderShop();return}const index=CHIP_VALUES.indexOf(value);state.inventory[index]++;state.selectedChip=value;saveState();render();renderShop();shopStatus.textContent=`已购买一枚 ${money(value)} 筹码。`;playChipDrop()};buyRack.append(buy);const sell=document.createElement('button');sell.type='button';sell.dataset.chipSell=value;sell.setAttribute('aria-label',`出售一枚 ${money(value)} 筹码`);sell.innerHTML=`<span class="shop-chip-stack">${chipArt(value,'shop-chip')}</span><b>${money(value)}</b><span>投入并出售一枚</span><small>换回 ${money(value)} USD</small><em class="shop-owned"></em>`;sell.onclick=()=>{const sold=sellChips(value,1);shopStatus.textContent=sold?`已出售一枚 ${money(value)} 筹码，水果机钱包增加 ${money(sold)} USD。`:'暂时无法出售这枚筹码。';renderShop()};sellRack.append(sell)})}
 function openShop(mode='buy'){if(state.busy)return;shopMode=mode;shopStatus.textContent='';renderShop();shop.showModal()}
 function payoutTotal(){return state.payoutTray.reduce((sum,value)=>sum+value,0)}
+function pocketPayout(value,count=1){
+  if((!CHIP_VALUES.includes(value)&&value!==.5)||count<=0)return 0;
+  let collected=0;
+  for(let index=state.payoutTray.length-1;index>=0&&collected<count;index--)if(state.payoutTray[index]===value){state.payoutTray.splice(index,1);collected++}
+  if(!collected)return 0;
+  if(value===.5){state.halfCredit+=collected*.5;const whole=Math.floor(state.halfCredit);if(whole){state.halfCredit-=whole;state.inventory[0]+=whole;state.selectedChip=1}}
+  else{state.inventory[CHIP_VALUES.indexOf(value)]+=collected;state.selectedChip=value}
+  saveState();render();return collected;
+}
+function announcePayoutCollection(value,count,sweeping=false){
+  if(!count)return;
+  const action=sweeping?'扫取':'领取';
+  setStatus(value===.5?`已${action} ${money(count)} 枚半筹码；每两枚自动合为 1`:count===1?`已${action}一枚 ${money(value)} 筹码`:`已${action} ${money(count)} 枚 ${money(value)} 筹码并收入袋口`);
+  playChipPickup();
+}
 function setDealerPreference(value){state.dealerChip=value;saveState();renderDealerDialog();$('#dealer-message',dealerDialog).textContent=value==='max'?'荷官：好的，我会优先使用可兑换的最大面额。':`荷官：好的，赔付时优先给您 ${money(value)} 面值的筹码。`}
 function renderDealerDialog(){
   const options=$('#dealer-chip-options',dealerDialog);options.replaceChildren();
@@ -242,7 +260,22 @@ function renderDealerDialog(){
 function openDealerDialog(){renderDealerDialog();if(!dealerDialog.open)dealerDialog.showModal()}
 buildShop();
 buildTable();buildChipRack();$('#roulette-undo',roulette).onclick=undo;$('#roulette-clear',roulette).onclick=clearBets;$('#roulette-repeat',roulette).onclick=repeatLast;$('#quick-bet-apply',roulette).onclick=()=>placeCallBet($('#quick-bet',roulette).value);$('#roulette-spin',roulette).onclick=spin;
-$('#payout-chip-pile',roulette).onclick=event=>{const button=event.target.closest('[data-payout-index]');if(!button)return;const index=Number(button.dataset.payoutIndex),value=state.payoutTray[index];if(!CHIP_VALUES.includes(value)&&value!==.5)return;state.payoutTray.splice(index,1);if(value===.5){state.halfCredit+=.5;if(state.halfCredit>=1){state.halfCredit-=1;state.inventory[0]++;state.selectedChip=1}}else{state.inventory[CHIP_VALUES.indexOf(value)]++;state.selectedChip=value}saveState();render();setStatus(value===.5?'已领取半枚筹码；两枚半筹码会自动合为 1':`已领取一枚 ${money(value)} 筹码`);playChipPickup()};
+const payoutPile=$('#payout-chip-pile',roulette);let payoutGesture=null,suppressPayoutClickUntil=0;
+function payoutHit(x,y){const hit=document.elementFromPoint(x,y)?.closest('[data-payout-value]');if(!hit)return null;const value=Number(hit.dataset.payoutValue),count=state.payoutTray.reduce((total,chip)=>total+(chip===value),0);return {value,key:`${value}:${count}`}}
+function sweepPayoutAt(x,y){if(!payoutGesture?.active)return;const hit=payoutHit(x,y);if(!hit||payoutGesture.visited.has(hit.key))return;payoutGesture.visited.add(hit.key);const count=pocketPayout(hit.value,1);payoutGesture.collected+=count;announcePayoutCollection(hit.value,count,true)}
+function finishPayoutGesture(event,cancelled=false){
+  const gesture=payoutGesture;if(!gesture||event.pointerId!==gesture.pointerId)return;clearTimeout(gesture.timer);gesture.target?.classList.remove('payout-pressing');payoutPile.classList.remove('payout-sweep-active','payout-gesture-armed');
+  if(!cancelled&&!gesture.active&&!gesture.moved){const count=pocketPayout(gesture.value,1);announcePayoutCollection(gesture.value,count)}else if(gesture.active&&gesture.collected)setStatus(`扫取完成 · 共 ${money(gesture.collected)} 枚筹码已收入袋口`);
+  suppressPayoutClickUntil=performance.now()+450;payoutGesture=null;if(payoutPile.hasPointerCapture?.(event.pointerId))payoutPile.releasePointerCapture(event.pointerId);
+}
+payoutPile.addEventListener('pointerdown',event=>{
+  if(event.button!==0||payoutGesture)return;const target=event.target.closest('[data-payout-value]');if(!target)return;event.preventDefault();const value=Number(target.dataset.payoutValue);
+  payoutGesture={pointerId:event.pointerId,value,target,startX:event.clientX,startY:event.clientY,moved:false,active:false,collected:0,visited:new Set(),timer:0};payoutPile.setPointerCapture?.(event.pointerId);payoutPile.classList.add('payout-gesture-armed');target.classList.add('payout-pressing');
+  payoutGesture.timer=setTimeout(()=>{if(!payoutGesture||payoutGesture.pointerId!==event.pointerId||payoutGesture.moved)return;payoutGesture.active=true;payoutPile.classList.add('payout-sweep-active');setStatus('扫取模式 · 滑过同色筹码堆即可收入袋口');navigator.vibrate?.(12);sweepPayoutAt(event.clientX,event.clientY)},320);
+});
+payoutPile.addEventListener('pointermove',event=>{const gesture=payoutGesture;if(!gesture||event.pointerId!==gesture.pointerId)return;const distance=Math.hypot(event.clientX-gesture.startX,event.clientY-gesture.startY);if(!gesture.active&&distance>10){gesture.moved=true;clearTimeout(gesture.timer);gesture.target?.classList.remove('payout-pressing');payoutPile.classList.remove('payout-gesture-armed');return}if(gesture.active){event.preventDefault();sweepPayoutAt(event.clientX,event.clientY)}});
+payoutPile.addEventListener('pointerup',event=>finishPayoutGesture(event));payoutPile.addEventListener('pointercancel',event=>finishPayoutGesture(event,true));
+payoutPile.addEventListener('click',event=>{const target=event.target.closest('[data-payout-value]');if(!target)return;if(performance.now()<suppressPayoutClickUntil){event.preventDefault();return}const value=Number(target.dataset.payoutValue),count=pocketPayout(value,1);announcePayoutCollection(value,count)});
 $$('[data-shop-mode]',shop).forEach(button=>button.onclick=()=>{shopMode=button.dataset.shopMode;shopStatus.textContent='';renderShop()});
 $('#sell-all-chips',shop).onclick=()=>{const total=inventoryTotal();if(!total)return;const request={amount:total,accepted:false};window.dispatchEvent(new CustomEvent('abyss:sell-roulette-chips',{detail:request}));if(!request.accepted){shopStatus.textContent='当前暂时无法出售筹码。';return}state.inventory.fill(0);saveState();render();renderShop();shopStatus.textContent=`已一键出售全部筹码，水果机钱包增加 ${money(total)} USD。`;playCashRegister()};
 $('.roulette-shop-button',roulette).onclick=()=>openShop('buy');$('.roulette-settings-button',roulette).onclick=()=>document.querySelector('#settings')?.click();$('#roulette-refill',roulette).onclick=()=>openShop('buy');$('.gateway-sell',gateway).onclick=()=>openShop('sell');$('.roulette-shop-close',shop).onclick=()=>shop.close();

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {ROULETTE_SEQUENCE,createDealerIntel,dealerTipChance,describeBet,describeDealerIntel,numberColor,restoreDealerIntel,settleBets} from '../dist/js/core/roulette.mjs';
+import {ROULETTE_SEQUENCE,createDealerIntel,dealerTipChance,describeBet,describeDealerIntel,groupPayoutChips,numberColor,restoreDealerIntel,settleBets} from '../dist/js/core/roulette.mjs';
 
 assert.equal(ROULETTE_SEQUENCE.length,37);
 assert.equal(new Set(ROULETTE_SEQUENCE).size,37);
@@ -44,4 +44,8 @@ assert.equal(describeDealerIntel(29,'dozen'),'下一局……会落在第 3 打�
 assert.equal(describeDealerIntel(17,'column'),'下一局……会落在第 2 列。');
 assert.deepEqual(restoreDealerIntel({result:17,type:'exact',tip:100}),{result:17,type:'exact',message:'下一局……盯紧 17 号。',tip:100,chance:.025});
 assert.equal(restoreDealerIntel({result:99,type:'exact',tip:100}),null);
+assert.deepEqual(groupPayoutChips([25,1,25,.5,100,1,25]),[
+  {value:100,count:1},{value:25,count:3},{value:1,count:2},{value:.5,count:1}
+]);
+assert.deepEqual(groupPayoutChips([0,-1,NaN]),[]);
 console.log('roulette tests passed');
