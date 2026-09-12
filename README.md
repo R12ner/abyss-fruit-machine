@@ -36,7 +36,7 @@ tests/                       # 核心规则和资金守恒测试
 npm run serve
 ```
 
-打开 http://localhost:8000 。
+打开 http://127.0.0.1:8000 。内置 Node 静态服务器会为 `.mjs` 返回正确的 JavaScript MIME 类型；不要直接双击 `index.html` 打开。
 
 ## 验证
 
