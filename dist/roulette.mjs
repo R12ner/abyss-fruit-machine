@@ -68,6 +68,7 @@ roulette.innerHTML=`
     <button type="button" class="casino-menu-button">♣ <span>赌场菜单</span></button>
     <div class="roulette-brand"><small>TABLE 01 · EUROPEAN</small><strong>深渊轮盘</strong></div>
     <button type="button" class="roulette-shop-button">筹码商店</button>
+    <button type="button" class="roulette-settings-button" aria-label="打开游戏设置">⚙ 设置</button>
     <div class="roulette-wallet"><span>可用筹码总值</span><output id="roulette-balance"></output></div>
     <button type="button" class="roulette-rules-button" aria-label="查看轮盘规则">?</button>
   </header>
@@ -196,7 +197,7 @@ buildTable();buildChipRack();$('#roulette-undo',roulette).onclick=undo;$('#roule
 $('#payout-chip-pile',roulette).onclick=event=>{const button=event.target.closest('[data-payout-index]');if(!button)return;const index=Number(button.dataset.payoutIndex),value=state.payoutTray[index];if(!CHIP_VALUES.includes(value)&&value!==.5)return;state.payoutTray.splice(index,1);if(value===.5){state.halfCredit+=.5;if(state.halfCredit>=1){state.halfCredit-=1;state.inventory[0]++;state.selectedChip=1}}else{state.inventory[CHIP_VALUES.indexOf(value)]++;state.selectedChip=value}saveState();render();setStatus(value===.5?'已领取半枚筹码；两枚半筹码会自动合为 1':`已领取一枚 ${money(value)} 筹码`);playChipDrop()};
 $$('[data-shop-mode]',shop).forEach(button=>button.onclick=()=>{shopMode=button.dataset.shopMode;shopStatus.textContent='';renderShop()});
 $('#sell-all-chips',shop).onclick=()=>{const total=inventoryTotal();if(!total)return;const request={amount:total,accepted:false};window.dispatchEvent(new CustomEvent('abyss:sell-roulette-chips',{detail:request}));if(!request.accepted){shopStatus.textContent='当前暂时无法出售筹码。';return}state.inventory.fill(0);saveState();render();renderShop();shopStatus.textContent=`已一键出售全部筹码，水果机钱包增加 ${money(total)} USD。`;playChipDrop(.8)};
-$('.roulette-shop-button',roulette).onclick=()=>openShop('buy');$('#roulette-refill',roulette).onclick=()=>openShop('buy');$('.gateway-sell',gateway).onclick=()=>openShop('sell');$('.roulette-shop-close',shop).onclick=()=>shop.close();
+$('.roulette-shop-button',roulette).onclick=()=>openShop('buy');$('.roulette-settings-button',roulette).onclick=()=>document.querySelector('#settings')?.click();$('#roulette-refill',roulette).onclick=()=>openShop('buy');$('.gateway-sell',gateway).onclick=()=>openShop('sell');$('.roulette-shop-close',shop).onclick=()=>shop.close();
 $('#table-collapse',roulette).onclick=()=>{state.tableCollapsed=!state.tableCollapsed;saveState();render()};
 const rules=$('#roulette-rules',roulette);$('.roulette-rules-button',roulette).onclick=()=>rules.showModal();$('.roulette-rules-close',rules).onclick=()=>rules.close();$('.roulette-rules-confirm',rules).onclick=()=>rules.close();document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!rules.open&&document.body.classList.contains('mode-roulette'))showGateway('games')});render();
 showGateway('welcome');

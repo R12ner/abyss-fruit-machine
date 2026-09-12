@@ -53,3 +53,8 @@ body.arcade-menu-open>header,body.arcade-menu-open>main,body.mode-roulette>heade
 .half-chip{display:grid!important;place-items:center;border:3px dashed #d9c36c;border-radius:50%;background:radial-gradient(circle,#ede2b9 0 48%,#315679 50% 68%,#e8dab0 70%);color:#162131!important;font:900 18px Georgia,serif;text-shadow:0 1px #fff;background-image:none!important}
 .table-collapsed .roulette-console{display:none}.wheel-disc{background-blend-mode:normal}
 @media(max-width:760px){.betting-panel .roulette-console{grid-template-columns:1fr 82px;grid-template-areas:"rack rack" "quick quick" "actions totals" "actions spin"}.betting-panel .chip-rack{grid-template-columns:repeat(8,48px);overflow-x:auto;justify-items:start}.quick-bet{grid-template-columns:1fr 82px}}
+
+/* 轮盘设置入口与精确落在线段/交点上的下注热区。 */
+.roulette-header{grid-template-columns:auto 1fr auto auto auto auto}.roulette-settings-button{padding:9px 13px;border:1px solid #5f6855;border-radius:18px;background:linear-gradient(#293129,#151a15);color:#d9d3b7;font:700 12px "Courier New",monospace;cursor:pointer}
+.street-line,.sixline-point,.zero-line,.zero-point{transform:none}.street-line{left:50%;bottom:-6px;width:62%;height:12px;border-radius:4px;background:#16483299;transform:translateX(-50%)}.sixline-point{right:-9px;bottom:-9px}.zero-line,.zero-point{right:-9px;transform:translateY(-50%)}.zero-basket{right:-9px;left:auto;bottom:-9px;transform:none}
+@media(max-width:760px){.roulette-settings-button{width:42px;padding:9px 0;font-size:0}.roulette-settings-button::before{content:"⚙";font-size:16px}}
