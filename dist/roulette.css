@@ -58,3 +58,8 @@ body.arcade-menu-open>header,body.arcade-menu-open>main,body.mode-roulette>heade
 .roulette-header{grid-template-columns:auto 1fr auto auto auto auto}.roulette-settings-button{padding:9px 13px;border:1px solid #5f6855;border-radius:18px;background:linear-gradient(#293129,#151a15);color:#d9d3b7;font:700 12px "Courier New",monospace;cursor:pointer}
 .street-line,.sixline-point,.zero-line,.zero-point{transform:none}.street-line{left:50%;bottom:-6px;width:62%;height:12px;border-radius:4px;background:#16483299;transform:translateX(-50%)}.sixline-point{right:-9px;bottom:-9px}.zero-line,.zero-point{right:-9px;transform:translateY(-50%)}.zero-basket{right:-9px;left:auto;bottom:-9px;transform:none}
 @media(max-width:760px){.roulette-settings-button{width:42px;padding:9px 0;font-size:0}.roulette-settings-button::before{content:"⚙";font-size:16px}}
+
+/* 号码置于彩色袋口内部。 */
+.wheel-crown{--wheel-radius:-176px}.wheel-pocket{font-weight:800;color:#fff7d5}
+@media(max-width:1220px){.wheel-crown{--wheel-radius:-176px}}
+@media(max-width:760px){.wheel-crown{--wheel-radius:calc(-1 * min(120px,30vw))}}
