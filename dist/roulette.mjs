@@ -123,23 +123,22 @@ wheelDisc.style.background=`repeating-conic-gradient(from ${-stepAngle/2}deg,tra
 ROULETTE_SEQUENCE.forEach((number,index)=>{const label=document.createElement('span');label.className=`wheel-pocket ${numberColor(number)}`;label.textContent=number;label.style.setProperty('--pocket-angle',`${index*stepAngle}deg`);label.style.setProperty('--pocket-inverse',`${-index*stepAngle}deg`);wheelDisc.append(label)});
 
 function makeBetButton(id,label,className=''){
-  const button=document.createElement('button');button.type='button';button.dataset.betId=id;button.className=`roulette-bet ${className}`.trim();button.innerHTML=`<span>${label}</span><span class="bet-stack" aria-hidden="true"></span><output class="bet-amount"></output>`;return button;
+  const button=document.createElement('button');button.type='button';button.dataset.betId=id;button.className=`roulette-bet ${className}`.trim();button.setAttribute('aria-label',describeBet(id)?.label||label);button.innerHTML=`<span>${label}</span><span class="bet-stack" aria-hidden="true"></span><output class="bet-amount"></output>`;return button;
 }
 function addBetButton(container,id,label,className=''){const button=makeBetButton(id,label,className);container.append(button);return button}
 function buildTable(){
   const table=$('#roulette-table',roulette),inside=document.createElement('div');inside.className='inside-board';
-  const zeroWrap=document.createElement('div');zeroWrap.className='zero-wrap';zeroWrap.append(makeBetButton('number-0','0','number green'));zeroWrap.append(makeBetButton('basket','首四','basket-hotspot'));inside.append(zeroWrap);
+  const zeroWrap=document.createElement('div');zeroWrap.className='zero-wrap';zeroWrap.append(makeBetButton('number-0','0','number green'));[['split-0-3','zero-line zero-3'],['split-0-2','zero-line zero-2'],['split-0-1','zero-line zero-1'],['trio-023','zero-point zero-23'],['trio-012','zero-point zero-12'],['basket','zero-point zero-basket']].forEach(([id,className])=>zeroWrap.append(makeBetButton(id,'',className)));inside.append(zeroWrap);
   for(let row=0;row<3;row++)for(let street=0;street<12;street++){
     const number=street*3+(3-row),wrap=document.createElement('div');wrap.className='number-wrap';wrap.style.gridColumn=String(street+2);wrap.style.gridRow=String(row+1);wrap.append(makeBetButton(`number-${number}`,number,`number ${numberColor(number)}`));
     if(street<11)wrap.append(makeBetButton(`split-${number}-${number+3}`,'','hotspot split-right'));
     if(row<2)wrap.append(makeBetButton(`split-${number-1}-${number}`,'','hotspot split-down'));
     if(street<11&&row<2)wrap.append(makeBetButton(`corner-${number-1}`,'','hotspot corner'));
+    if(row===2)wrap.append(makeBetButton(`street-${street}`,'','street-line'));
+    if(row===2&&street<11)wrap.append(makeBetButton(`sixline-${street}`,'','sixline-point'));
     inside.append(wrap);
   }
   [3,2,1].forEach((column,row)=>{const button=makeBetButton(`column-${column}`,'2 TO 1','column-bet');button.style.gridColumn='14';button.style.gridRow=String(row+1);inside.append(button)});table.append(inside);
-  const streetRow=document.createElement('div');streetRow.className='street-row';
-  for(let street=0;street<12;street++){const wrap=document.createElement('div');wrap.className='street-wrap';const first=street*3+1;wrap.append(makeBetButton(`street-${street}`,`${first}–${first+2}`,'street-bet'));if(street<11)wrap.append(makeBetButton(`sixline-${street}`,'◆','sixline-hotspot'));streetRow.append(wrap)}table.append(streetRow);
-  const zeroSpecials=document.createElement('div');zeroSpecials.className='zero-special-row';[['split-0-1','0·1'],['split-0-2','0·2'],['split-0-3','0·3'],['trio-012','0·1·2'],['trio-023','0·2·3']].forEach(([id,label])=>addBetButton(zeroSpecials,id,label,'zero-special'));table.append(zeroSpecials);
   const dozens=document.createElement('div');dozens.className='dozen-row';['1ST 12','2ND 12','3RD 12'].forEach((label,index)=>addBetButton(dozens,`dozen-${index+1}`,label,'outside-bet'));table.append(dozens);
   const outside=document.createElement('div');outside.className='outside-row';[['low','1–18'],['even','双 EVEN'],['red','红 RED'],['black','黑 BLACK'],['odd','单 ODD'],['high','19–36']].forEach(([id,label])=>addBetButton(outside,id,label,`outside-bet ${id}`));table.append(outside);
   table.addEventListener('click',event=>{const button=event.target.closest('[data-bet-id]');if(button)adjustBet(button.dataset.betId,event.shiftKey)});table.addEventListener('contextmenu',event=>{const button=event.target.closest('[data-bet-id]');if(!button)return;event.preventDefault();adjustBet(button.dataset.betId,true)});
