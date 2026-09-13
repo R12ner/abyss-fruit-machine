@@ -1,124 +1,296 @@
-import {createFrame, drawFelt, money, readState, writeState, playSound, secureRandom} from '../mechanical/shared.mjs';
-import {PAYTABLES, ROWS, STAKES, createPlinkoRound, restorePlinkoRound, plinkoPosition} from './model.mjs';
+import {createFrame, drawFelt, money, readState, writeState, playTone, playClink, playFanfare, playThud,
+  secureRandom, createShaker, createFloaters} from '../mechanical/shared.mjs';
+import {ROW_OPTIONS, RISKS, RISK_KEYS, STAKES, ENERGY_GOAL, ENERGY_PER_DROP, ENERGY_PER_GOLD,
+  CHARGED_MULTIPLIER, NUDGE_MAX, NUDGE_RECHARGE, GOLD_PEGS, goldBonusTenths, paytable, plinkoGeometry,
+  createPlinkoRound, restorePlinkoRound, nudgePlinkoRound, plinkoPosition, pathColumns} from './model.mjs';
 
 export const plinkoGameDefinition = Object.freeze({
-  id: 'plinko', badge: 'MACHINE 03', title: '深渊弹珠机', subtitle: 'PLINKO · 12 层钉阵 · 倍率落盘', cardClass: 'plinko-card',
+  id: 'plinko', badge: 'MACHINE 03', title: '深渊弹珠机', subtitle: 'PLINKO · 金钉 · 蓄能 · 推球', cardClass: 'plinko-card',
   art: '<span class="mechanical-card-art" aria-hidden="true"><img src="assets/plinko/machine.svg" alt=""></span>',
   create: createPlinkoGame,
 });
 
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
 export function createPlinkoGame({wallet, openLobby}) {
-  const key = 'abyss-plinko-state-v1', saved = readState(key);
+  const key = 'abyss-plinko-state-v2', saved = readState(key);
   let bet = STAKES.includes(saved?.bet) ? saved.bet : 10;
-  let risk = Object.hasOwn(PAYTABLES, saved?.risk) ? saved.risk : 'classic';
+  let risk = Object.hasOwn(RISKS, saved?.risk) ? saved.risk : 'classic';
+  let rows = ROW_OPTIONS.includes(saved?.rows) ? saved.rows : 12;
   let tray = Number.isSafeInteger(saved?.tray) && saved.tray >= 0 ? saved.tray : 0;
-  let pending = restorePlinkoRound(saved?.pending), progress = pending && Number.isFinite(saved?.progress) ? Math.max(0, Math.min(.999, saved.progress)) : 0;
+  let energy = Number.isSafeInteger(saved?.energy) && saved.energy >= 0 ? Math.min(ENERGY_GOAL, saved.energy) : 0;
+  let nudge = Number.isFinite(saved?.nudge) ? clamp(saved.nudge, 0, NUDGE_MAX) : NUDGE_MAX;
+  let queue = Number.isSafeInteger(saved?.queue) ? clamp(saved.queue, 0, 4) : 0;
+  let pending = restorePlinkoRound(saved?.pending);
+  let progress = pending && Number.isFinite(saved?.progress) ? clamp(saved.progress, 0, .999) : 0;
   let history = Array.isArray(saved?.history) ? saved.history.map(restorePlinkoRound).filter(Boolean).slice(0, 8) : [];
-  let last = history[0] || null, active = false, animation = 0, lastTime = 0, lastPin = -1, lastSave = 0;
-  if (pending) {bet = pending.bet; risk = pending.risk;}
-  const duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 1.3 : 4.4;
-  const trail = [];
+  let last = history[0] || null, active = false, animation = 0, lastTime = 0, lastPin = -1, lastSave = 0, nudgeTimer = 0;
+  if (pending) {bet = pending.bet; risk = pending.risk; rows = pending.rows;}
+
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const trail = [], flashes = [], shaker = createShaker(), floaters = createFloaters();
+  const durationFor = count => (reduced ? 1.3 : 2.6 + count * .11);
+
   const view = createFrame({id: 'plinko', title: '深渊弹珠机', english: 'THE PLINKO CLUB', number: 'MACHINE 03', wallet, openLobby,
-    controls: `<div class="mechanical-controls"><span class="mechanical-control-label" id="plinko-stake-label">每颗弹珠 <output id="plinko-cost">10 USD</output></span>
+    controls: `<div class="mechanical-energy"><span>深渊能量 <small>CHARGE</small></span>
+        <div class="mechanical-energy-bar" aria-hidden="true"><i data-energy-fill></i></div>
+        <output data-energy>0 / ${ENERGY_GOAL}</output><p data-energy-hint>投球 +${ENERGY_PER_DROP}，命中金钉 +${ENERGY_PER_GOLD}。充满后下一颗是 ×${CHARGED_MULTIPLIER} 深渊之球。</p></div>
+      <div class="mechanical-controls">
+      <span class="mechanical-control-label" id="plinko-stake-label">每颗弹珠 <output id="plinko-cost">10 USD</output></span>
       <div class="mechanical-options" role="group" aria-labelledby="plinko-stake-label">${STAKES.map(value => `<button type="button" data-plinko-bet="${value}" aria-pressed="false">${value}</button>`).join('')}</div>
-      <span class="mechanical-control-label" id="plinko-risk-label">倍率档位</span><div class="mechanical-risk" role="group" aria-labelledby="plinko-risk-label"><button type="button" data-plinko-risk="classic" aria-pressed="true">经典</button><button type="button" data-plinko-risk="high" aria-pressed="false">高倍</button></div>
+      <span class="mechanical-control-label" id="plinko-rows-label">钉阵层数 <output id="plinko-rows-value">12 层</output></span>
+      <div class="mechanical-rows" role="group" aria-labelledby="plinko-rows-label">${ROW_OPTIONS.map(value => `<button type="button" data-plinko-rows="${value}" aria-pressed="false">${value} 层</button>`).join('')}</div>
+      <span class="mechanical-control-label" id="plinko-risk-label">倍率档位 <output id="plinko-risk-value">经典</output></span>
+      <div class="mechanical-risk mechanical-risk-4" role="group" aria-labelledby="plinko-risk-label">${RISK_KEYS.map(name => `<button type="button" data-plinko-risk="${name}" aria-pressed="false">${RISKS[name].label}</button>`).join('')}</div>
       <button type="button" class="mechanical-launch" id="plinko-drop">释放弹珠 · 10 USD<small>DROP THE BALL</small></button>
-      <p>穿过 12 层钉阵，按落点倍率得币。倍率包含本金，越靠两侧越难命中。</p></div>`,
-    help: `<p>选择弹珠面额和倍率档位，按“释放弹珠”立即扣除一颗弹珠的费用。每层碰钉后有相同机会向左或向右，12 次后落入 13 个奖励槽之一。两侧高倍率更难命中。</p>
-      <p>奖励 = 弹珠面额 × 落点倍率，已包含本金。例如投入 10 USD，落到 ×0.5 得 5 USD，落到 ×3 得 30 USD。高倍档的正中槽为 ×0，不返还费用。</p>
-      <p>经典档最高 ×10，高倍档最高 ×100。两档都不保证获奖。下方倍率条可横向滑动查看所有槽位，结果加入出币槽，按“领取到钱包”收取。</p>
-      <p>落球期间不能改面额、档位或重复扣款。切换游戏会暂停动画；刷新后会继续已扣费的同一颗弹珠，不会重新抽取结果。</p>`});
+      <button type="button" class="mechanical-burst" id="plinko-multi">连发 3 颗</button>
+      <div class="plinko-nudge"><span class="mechanical-control-label" id="plinko-nudge-label">推球 <output id="plinko-nudge-value">2 / ${NUDGE_MAX}</output></span>
+        <div class="pusher-tilt-bar" aria-hidden="true"><i data-nudge-fill></i></div>
+        <div class="pusher-tilt-row" role="group" aria-labelledby="plinko-nudge-label">
+          <button type="button" id="plinko-nudge-left">◀ 左推</button><button type="button" id="plinko-nudge-right">右推 ▶</button></div></div>
+      <p>穿过钉阵按落点倍率得币。倍率包含本金，越靠两侧越难命中。</p></div>`,
+    help: `<p><b>基本玩法</b>：选择面额、层数和档位，按“释放弹珠”立即扣费。每层碰钉后左右机会相同，落入 层数+1 个奖励槽之一。奖励 = 面额 × 落点倍率，已包含本金。</p>
+      <p><b>层数</b>：8 层节奏最快、落点少；12 层是标准盘；16 层最长，两侧倍率也最高。层数变化时整张赔付表会重算。</p>
+      <p><b>档位</b>：低风险 / 经典 / 高倍 / 深渊。越往上中央越薄、边缘越夸张，16 层深渊档边槽可达数百倍。</p>
+      <p><b>金钉</b>：每颗球开局随机点亮 ${GOLD_PEGS} 枚金钉。球撞到一枚金钉，最终倍率额外 +${goldBonusTenths(12) / 10}（随层数缩放），同时能量 +${ENERGY_PER_GOLD}。</p>
+      <p><b>深渊能量</b>：每投一球 +${ENERGY_PER_DROP}，命中金钉再 +${ENERGY_PER_GOLD}。攒满 ${ENERGY_GOAL} 点后，下一颗自动变成 ×${CHARGED_MULTIPLIER} 深渊之球，赔付整体翻倍。</p>
+      <p><b>推球</b>：落球途中按左右方向键（或按钮）可以把下一层的碰钉结果拨向指定一侧，每颗球最多用 ${NUDGE_MAX} 次，能量约每 ${NUDGE_RECHARGE} 秒回复 1 次。落点和金钉命中会立刻重算。</p>
+      <p>落球期间不能改面额、层数或档位。切换游戏会暂停动画；刷新后会继续已扣费的同一颗弹珠，不会重新抽取结果。结果进入出币槽，按“领取到钱包”收取。</p>`});
+
   const {context: ctx, $} = view;
-  const odds = document.createElement('div'); odds.className = 'plinko-odds'; odds.setAttribute('aria-label', '从左到右的十三个落点倍率');
+  const odds = document.createElement('div'); odds.className = 'plinko-odds'; odds.setAttribute('aria-label', '从左到右的落点倍率');
   $('.mechanical-scene').after(odds);
-  const persist = () => writeState(key, {bet, risk, tray, pending, progress, history});
+  const persist = () => writeState(key, {bet, risk, rows, tray, energy, nudge, queue, pending, progress, history});
+
+  function currentRows() {return pending?.rows || rows;}
+  function currentRisk() {return pending?.risk || risk;}
+
   function render() {
-    const currentRisk = pending?.risk || risk;
+    const table = paytable(currentRows(), currentRisk());
     view.update({tray, win: pending ? 0 : last?.payout || 0, busy: !!pending, minimum: bet});
+    const charged = energy >= ENERGY_GOAL;
     $('#plinko-drop').disabled = !!pending || wallet.balance() < bet;
-    $('#plinko-drop').innerHTML = `${pending ? '弹珠下落中' : `释放弹珠 · ${bet} USD`}<small>DROP THE BALL</small>`;
+    $('#plinko-drop').innerHTML = `${pending ? '弹珠下落中' : `${charged ? '深渊之球 ×' + CHARGED_MULTIPLIER + ' · ' : '释放弹珠 · '}${bet} USD`}<small>DROP THE BALL</small>`;
+    $('#plinko-drop').classList.toggle('is-charged', charged && !pending);
+    $('#plinko-multi').disabled = !!pending || wallet.balance() < bet;
+    $('#plinko-multi').textContent = queue > 0 ? `连发中 · 还剩 ${queue} 颗` : '连发 3 颗';
     $('#plinko-cost').textContent = `${bet} USD`;
+    $('#plinko-rows-value').textContent = `${currentRows()} 层`;
+    $('#plinko-risk-value').textContent = RISKS[currentRisk()].label;
     view.root.querySelectorAll('[data-plinko-bet]').forEach(button => {button.disabled = !!pending; button.setAttribute('aria-pressed', String(Number(button.dataset.plinkoBet) === bet));});
+    view.root.querySelectorAll('[data-plinko-rows]').forEach(button => {button.disabled = !!pending; button.setAttribute('aria-pressed', String(Number(button.dataset.plinkoRows) === rows));});
     view.root.querySelectorAll('[data-plinko-risk]').forEach(button => {button.disabled = !!pending; button.setAttribute('aria-pressed', String(button.dataset.plinkoRisk === risk));});
-    odds.innerHTML = PAYTABLES[currentRisk].map((value, index) => `<span class="${!pending && last?.risk === currentRisk && last.slot === index ? 'is-hit' : ''}" aria-label="第 ${index + 1} 槽，${value / 10} 倍">×${value / 10}</span>`).join('');
-    $('[data-history]').innerHTML = history.length ? history.map(round => `<b class="${round.payout < round.bet ? 'lost' : ''}" title="${round.bet} USD × ${round.multiplier} = ${round.payout} USD">×${round.multiplier}</b>`).join('') : '还没有游戏记录';
+    $('[data-energy]').textContent = `${Math.min(energy, ENERGY_GOAL)} / ${ENERGY_GOAL}`;
+    $('[data-energy-fill]').style.width = `${Math.min(1, energy / ENERGY_GOAL) * 100}%`;
+    $('.mechanical-energy').classList.toggle('is-full', charged);
+    odds.style.setProperty('--slots', String(table.length));
+    odds.innerHTML = table.map((value, index) => `<span class="${!pending && last?.risk === currentRisk() && last?.rows === currentRows() && last.slot === index ? 'is-hit' : ''}" aria-label="第 ${index + 1} 槽，${value / 10} 倍">×${value / 10}</span>`).join('');
+    $('[data-history]').innerHTML = history.length
+      ? history.map(round => `<b class="${round.payout < round.bet ? 'lost' : ''}${round.charged ? ' charged' : ''}" title="${round.bet} USD × ${round.multiplier} = ${round.payout} USD（${round.rows} 层 ${RISKS[round.risk].label}${round.goldHits ? ` · 金钉 ${round.goldHits}` : ''}）">×${round.multiplier}</b>`).join('')
+      : '还没有游戏记录';
+    renderNudge();
   }
-  function draw() {
+  function renderNudge() {
+    const charges = Math.floor(nudge);
+    const spare = pending ? NUDGE_MAX - pending.nudged.length : NUDGE_MAX;
+    $('#plinko-nudge-value').textContent = `${charges} / ${NUDGE_MAX}`;
+    $('[data-nudge-fill]').style.width = `${nudge / NUDGE_MAX * 100}%`;
+    const usable = charges >= 1 && !!pending && spare > 0;
+    $('#plinko-nudge-left').disabled = $('#plinko-nudge-right').disabled = !usable;
+  }
+
+  function draw(dt = 0) {
+    const count = currentRows(), geometry = plinkoGeometry(count), table = paytable(count, currentRisk());
     drawFelt(ctx);
+    shaker.begin(ctx, dt);
     ctx.fillStyle = '#0c2c1b'; ctx.strokeStyle = '#aa9050'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(342, 69); ctx.quadraticCurveTo(360, 50, 378, 69); ctx.lineTo(657, 501); ctx.quadraticCurveTo(671, 532, 639, 532); ctx.lineTo(81, 532); ctx.quadraticCurveTo(49, 532, 63, 501); ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(342, 69); ctx.quadraticCurveTo(360, 50, 378, 69); ctx.lineTo(657, 501);
+    ctx.quadraticCurveTo(671, 532, 639, 532); ctx.lineTo(81, 532); ctx.quadraticCurveTo(49, 532, 63, 501); ctx.closePath(); ctx.fill(); ctx.stroke();
     ctx.strokeStyle = '#d1b26433'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(360, 83); ctx.lineTo(643, 515); ctx.lineTo(77, 515); ctx.closePath(); ctx.stroke();
-    ctx.fillStyle = '#9fb69b'; ctx.textAlign = 'center'; ctx.font = '15px Georgia'; ctx.fillText('ABYSS · PLINKO', 360, 28);
+    ctx.fillStyle = '#9fb69b'; ctx.textAlign = 'center'; ctx.font = '15px Georgia';
+    ctx.fillText(`ABYSS · PLINKO · ${count} ROWS`, 360, 28);
+
     const ball = pending ? plinkoPosition(pending, progress) : null;
-    let pathX = 360;
-    for (let row = 0; row < ROWS; row++) {
-      for (let col = 0; col <= row; col++) {
-        const x = 360 - row * 22 + col * 44, y = 108 + row * 30;
-        const hit = pending && row === ball.row && Math.abs(x - pathX) < 1;
-        ctx.fillStyle = '#0008'; ctx.beginPath(); ctx.arc(x + 1, y + 3, 5, 0, Math.PI * 2); ctx.fill();
-        if (hit) {ctx.fillStyle = '#e2d78c33'; ctx.beginPath(); ctx.arc(x, y, 15, 0, Math.PI * 2); ctx.fill();}
-        ctx.fillStyle = hit ? '#fff0b3' : '#c6b273'; ctx.beginPath(); ctx.arc(x, y, hit ? 5.5 : 4, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#f9edb9'; ctx.beginPath(); ctx.arc(x - 1, y - 1.5, 1.5, 0, Math.PI * 2); ctx.fill();
-      }
-      if (pending) pathX += pending.directions[row] ? 22 : -22;
+    const columns = pending ? pathColumns(pending.directions) : null;
+    const golden = new Set((pending?.gold || []).map(pair => `${pair[0]},${pair[1]}`));
+    const radius = Math.max(2.6, Math.min(5, geometry.spacing / 9));
+    for (let row = 0; row < count; row++) for (let col = 0; col <= row; col++) {
+      const x = geometry.pegX(row, col), y = geometry.pegY(row);
+      const gold = golden.has(`${row},${col}`);
+      const hit = pending && row === ball.row && columns[row] === col;
+      ctx.fillStyle = '#0008'; ctx.beginPath(); ctx.arc(x + 1, y + 3, radius + 1, 0, Math.PI * 2); ctx.fill();
+      if (gold) {ctx.shadowColor = '#ffd15c'; ctx.shadowBlur = 12;}
+      if (hit) {ctx.fillStyle = gold ? '#ffd97a44' : '#e2d78c33'; ctx.beginPath(); ctx.arc(x, y, radius * 3, 0, Math.PI * 2); ctx.fill();}
+      ctx.fillStyle = gold ? '#ffce62' : hit ? '#fff0b3' : '#c6b273';
+      ctx.beginPath(); ctx.arc(x, y, hit ? radius * 1.35 : radius, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#f9edb9'; ctx.beginPath(); ctx.arc(x - radius * .25, y - radius * .35, Math.max(1, radius * .35), 0, Math.PI * 2); ctx.fill();
     }
-    const currentRisk = pending?.risk || risk;
-    PAYTABLES[currentRisk].forEach((value, index) => {
-      const x = 76 + index * 44, hit = !pending && last?.risk === currentRisk && last.slot === index;
-      ctx.fillStyle = hit ? '#edd391' : index < 2 || index > 10 ? '#87502d' : index < 4 || index > 8 ? '#796038' : '#314c2f';
-      ctx.fillRect(x, 492, 40, 38); ctx.strokeStyle = hit ? '#fff1b8' : '#b49c61'; ctx.lineWidth = 1; ctx.strokeRect(x, 492, 40, 38);
-      ctx.fillStyle = hit ? '#332713' : '#fff0c2'; ctx.font = `${value >= 1000 ? 16 : 19}px Georgia`; ctx.textAlign = 'center'; ctx.fillText(`${value / 10}×`, x + 20, 517);
-      ctx.fillStyle = '#a18b55'; ctx.fillRect(x - 3, 469, 3, 61);
+    for (const flash of flashes) {
+      const t = flash.age / .42;
+      ctx.strokeStyle = flash.gold ? `rgba(255,214,110,${1 - t})` : `rgba(210,238,206,${(1 - t) * .6})`;
+      ctx.lineWidth = 2.5 * (1 - t) + .5;
+      ctx.beginPath(); ctx.arc(flash.x, flash.y, 4 + t * (flash.gold ? 26 : 15), 0, Math.PI * 2); ctx.stroke();
+    }
+
+    const slotWidth = Math.max(20, geometry.spacing - 4);
+    table.forEach((value, index) => {
+      const center = geometry.slotCenter(index), x = center - slotWidth / 2;
+      const hit = !pending && last?.risk === currentRisk() && last?.rows === count && last.slot === index;
+      const edge = Math.abs(index - count / 2) / (count / 2);
+      ctx.fillStyle = hit ? '#edd391' : edge > .74 ? '#87502d' : edge > .42 ? '#796038' : '#314c2f';
+      ctx.fillRect(x, 492, slotWidth, 38);
+      ctx.strokeStyle = hit ? '#fff1b8' : '#b49c61'; ctx.lineWidth = 1; ctx.strokeRect(x, 492, slotWidth, 38);
+      const shown = value >= 1000 ? Math.round(value / 10) : value / 10;
+      const text = `${shown}×`;
+      ctx.fillStyle = hit ? '#332713' : '#fff0c2';
+      ctx.font = `${slotWidth < 30 ? (text.length > 4 ? 10 : 12) : text.length > 4 ? 13 : 17}px Georgia`;
+      ctx.textAlign = 'center';
+      ctx.fillText(text, center, 517);
+      ctx.fillStyle = '#a18b55'; ctx.fillRect(center - slotWidth / 2 - 3, 469, 3, 61);
     });
+
     if (pending) {
-      trail.forEach((point, index) => {ctx.globalAlpha = (index + 1) / trail.length * .2; ctx.fillStyle = '#c8e7c6'; ctx.beginPath(); ctx.arc(point.x, point.y, 5, 0, Math.PI * 2); ctx.fill();}); ctx.globalAlpha = 1;
-      drawBall(ball.x, ball.y);
-    } else drawBall(last && last.risk === risk ? 96 + last.slot * 44 : 360, last && last.risk === risk ? 480 : 53);
-    ctx.fillStyle = '#d4c190'; ctx.font = '15px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(`${currentRisk === 'high' ? '高倍' : '经典'}档 · 12 层钉阵 · 13 个落点`, 360, 574);
-  }
-  function drawBall(x, y) {
-    ctx.shadowColor = '#f4e8ab'; ctx.shadowBlur = 13;
-    const ball = ctx.createRadialGradient(x - 3, y - 4, 0, x, y, 9); ball.addColorStop(0, '#fffef1'); ball.addColorStop(.35, '#e8dab1'); ball.addColorStop(1, '#847047');
-    ctx.fillStyle = ball; ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
-  }
-  function tick(now) {
-    if (!active || document.hidden || !pending) {animation = 0; return;}
-    progress += lastTime ? Math.min(.07, (now - lastTime) / 1000) / duration : 0; lastTime = now;
-    const point = plinkoPosition(pending, progress); trail.push(point); if (trail.length > 9) trail.shift();
-    if (point.row !== lastPin && point.row >= 0 && point.row < ROWS) {lastPin = point.row; playSound(640 + point.row * 35, .055);}
-    if (progress >= 1) {
-      last = pending; tray += pending.payout; history.unshift(pending); history = history.slice(0, 8); pending = null; progress = 0; trail.length = 0;
-      persist(); render(); draw(); animation = 0;
-      view.status(`落入第 ${last.slot + 1} 槽 · ×${last.multiplier} · 得币 ${money(last.payout)} USD`);
-      playSound(last.payout >= last.bet ? 1060 : 220, .28); return;
+      trail.forEach((point, index) => {
+        ctx.globalAlpha = (index + 1) / trail.length * (pending.charged ? .34 : .2);
+        ctx.fillStyle = pending.charged ? '#9de8ff' : '#c8e7c6';
+        ctx.beginPath(); ctx.arc(point.x, point.y, 5, 0, Math.PI * 2); ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+      drawBall(ball.x, ball.y, pending.charged);
+      if (pending.goldHits) {
+        ctx.fillStyle = '#ffd678'; ctx.font = '15px Georgia'; ctx.textAlign = 'center';
+        ctx.fillText(`金钉 ×${pending.goldHits} · +${pending.bonusTenths / 10}`, 360, 62);
+      }
+    } else {
+      const resting = last && last.risk === risk && last.rows === rows;
+      drawBall(resting ? geometry.slotCenter(last.slot) : 360, resting ? 480 : 53, energy >= ENERGY_GOAL);
     }
-    if (now - lastSave > 700) {persist(); lastSave = now;}
-    draw(); animation = requestAnimationFrame(tick);
+    floaters.draw(ctx);
+    ctx.fillStyle = '#d4c190'; ctx.font = '15px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(`${RISKS[currentRisk()].label}档 · ${count} 层钉阵 · ${count + 1} 个落点${pending ? ` · 推球剩 ${NUDGE_MAX - pending.nudged.length}` : ''}`, 360, 574);
+    shaker.end(ctx);
   }
-  function resume() {if (active && pending && !document.hidden && !animation) {lastTime = 0; animation = requestAnimationFrame(tick);}}
-  function drop() {
+  function drawBall(x, y, charged) {
+    ctx.shadowColor = charged ? '#8fe6ff' : '#f4e8ab'; ctx.shadowBlur = charged ? 22 : 13;
+    const ball = ctx.createRadialGradient(x - 3, y - 4, 0, x, y, 9);
+    if (charged) {ball.addColorStop(0, '#ffffff'); ball.addColorStop(.35, '#a8ecff'); ball.addColorStop(1, '#1d6f8c');}
+    else {ball.addColorStop(0, '#fffef1'); ball.addColorStop(.35, '#e8dab1'); ball.addColorStop(1, '#847047');}
+    ctx.fillStyle = ball; ctx.beginPath(); ctx.arc(x, y, charged ? 9 : 8, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
+  }
+
+  function settle() {
+    const round = pending;
+    last = round; tray += round.payout;
+    history.unshift(round); history = history.slice(0, 8);
+    energy = Math.min(ENERGY_GOAL, (round.charged ? 0 : energy) + ENERGY_PER_DROP + ENERGY_PER_GOLD * round.goldHits);
+    pending = null; progress = 0; trail.length = 0;
+    const geometry = plinkoGeometry(round.rows);
+    const ratio = round.payout / round.bet;
+    floaters.push(`×${round.multiplier}`, geometry.slotCenter(round.slot), 486,
+      {color: ratio >= 2 ? '#ffe07a' : ratio >= 1 ? '#d7f0cf' : '#a9b3a2', size: ratio >= 5 ? 40 : ratio >= 2 ? 30 : 22, life: 1.5, rise: 74});
+    if (round.payout) floaters.push(`+${money(round.payout)} USD`, 360, 445, {color: '#ffe9a8', size: 22, life: 1.4});
+    shaker.kick(clamp(ratio * 2.4, 1, 18));
+    playFanfare(ratio >= 10 ? 5 : ratio >= 3 ? 4 : ratio >= 1 ? 2 : 0);
+    if (ratio < 1) playThud(190);
+    view.status(`${round.charged ? '深渊之球 · ' : ''}落入第 ${round.slot + 1} 槽 · ×${round.multiplier}` +
+      `${round.goldHits ? `（金钉 ${round.goldHits} 枚 +${round.bonusTenths / 10}）` : ''} · 得币 ${money(round.payout)} USD` +
+      `${energy >= ENERGY_GOAL ? ' · 能量已满，下一颗是深渊之球' : ''}`);
+    persist(); render(); draw();
+    if (queue > 0) {queue--; persist(); render(); setTimeout(() => {if (active) drop(true);}, reduced ? 200 : 620);}
+  }
+
+  function tick(now) {
+    if (!active || document.hidden) {animation = 0; return;}
+    const elapsed = lastTime ? Math.min(.07, (now - lastTime) / 1000) : 0; lastTime = now;
+    nudgeTimer += elapsed;
+    if (nudge < NUDGE_MAX) {nudge = Math.min(NUDGE_MAX, nudge + elapsed / NUDGE_RECHARGE); if (nudgeTimer > .25) {nudgeTimer = 0; renderNudge();}}
+    for (let i = flashes.length - 1; i >= 0; i--) if ((flashes[i].age += elapsed) > .42) flashes.splice(i, 1);
+    floaters.step(elapsed);
+    if (pending) {
+      progress += elapsed / durationFor(pending.rows);
+      const point = plinkoPosition(pending, progress);
+      trail.push(point); if (trail.length > 9) trail.shift();
+      if (point.row !== lastPin && point.row >= 0 && point.row < pending.rows) {
+        lastPin = point.row;
+        const geometry = plinkoGeometry(pending.rows);
+        const gold = pending.gold.some(pair => pair[0] === point.row && pair[1] === point.col);
+        flashes.push({x: geometry.pegX(point.row, point.col), y: geometry.pegY(point.row), age: 0, gold});
+        playClink(.85 + point.row / pending.rows * .9, gold ? .11 : .06);
+        if (gold) {
+          playTone(1250, .16, {type: 'triangle', level: .1, sweep: 1.4});
+          floaters.push(`金钉 +${goldBonusTenths(pending.rows) / 10}`, geometry.pegX(point.row, point.col), geometry.pegY(point.row) - 12,
+            {color: '#ffd979', size: 18, life: .85, rise: 40});
+          shaker.kick(4);
+        }
+      }
+      if (progress >= 1) {settle(); animation = flashes.length || floaters.length || shaker.active ? requestAnimationFrame(tick) : 0; return;}
+      if (now - lastSave > 700) {persist(); lastSave = now;}
+    }
+    draw(elapsed);
+    animation = pending || flashes.length || floaters.length || shaker.active ? requestAnimationFrame(tick) : 0;
+  }
+  function resume() {if (active && !document.hidden && !animation) {lastTime = 0; animation = requestAnimationFrame(tick);}}
+
+  function drop(fromQueue = false) {
     if (!active || pending) return;
-    let round; try {round = createPlinkoRound(bet, risk, secureRandom);} catch {view.status('弹珠暂时无法释放，请重试'); return;}
-    if (wallet.spend(bet) !== bet) {view.status('钱包余额不足，或其他机台正在结算'); render(); return;}
-    pending = round; progress = 0; lastPin = -1; trail.length = 0; persist(); render();
-    view.status('弹珠穿过钉阵 · 等待落盘'); playSound(410, .1); resume();
+    const charged = energy >= ENERGY_GOAL;
+    let round;
+    try {round = createPlinkoRound({bet, risk, rows, charged}, secureRandom);}
+    catch {view.status('弹珠暂时无法释放，请重试'); return;}
+    if (wallet.spend(bet) !== bet) {
+      queue = 0;
+      view.status('钱包余额不足，或其他机台正在结算'); render(); return;
+    }
+    pending = round; progress = 0; lastPin = -1; trail.length = 0; flashes.length = 0;
+    persist(); render();
+    view.status(`${charged ? '深渊之球释放 · 赔付 ×' + CHARGED_MULTIPLIER : '弹珠穿过钉阵'} · 金钉 ${round.gold.length} 枚${fromQueue ? ` · 连发剩 ${queue} 颗` : ''}`);
+    playTone(charged ? 620 : 410, .12, {type: charged ? 'square' : 'sine', level: .09});
+    if (charged) shaker.kick(6);
+    resume();
   }
-  $('#plinko-drop').onclick = drop;
+  function pushBall(direction) {
+    if (!active || !pending || nudge < 1) return;
+    const point = plinkoPosition(pending, progress);
+    const target = point.row < 0 ? 0 : point.row + 1;
+    if (target >= pending.rows) {view.status('已经到底层，来不及推了'); return;}
+    if (!nudgePlinkoRound(pending, target, direction)) {view.status(`这颗球的推球次数已用完（每颗 ${NUDGE_MAX} 次）`); renderNudge(); return;}
+    nudge -= 1;
+    const geometry = plinkoGeometry(pending.rows);
+    floaters.push(direction ? '推 ▶' : '◀ 推', geometry.pegX(target, pathColumns(pending.directions)[target]), geometry.pegY(target) - 18,
+      {color: '#a8e6ff', size: 20, life: .8, rise: 34});
+    shaker.kick(5); playTone(direction ? 720 : 540, .1, {type: 'square', level: .08});
+    persist(); render(); resume();
+  }
+
+  $('#plinko-drop').onclick = () => {queue = 0; drop();};
+  $('#plinko-multi').onclick = () => {if (pending) return; queue = 2; persist(); render(); drop(true);};
+  $('#plinko-nudge-left').onclick = () => pushBall(0);
+  $('#plinko-nudge-right').onclick = () => pushBall(1);
   view.root.querySelectorAll('[data-plinko-bet]').forEach(button => {button.onclick = () => {if (pending) return; bet = Number(button.dataset.plinkoBet); persist(); render();};});
+  view.root.querySelectorAll('[data-plinko-rows]').forEach(button => {button.onclick = () => {if (pending) return; rows = Number(button.dataset.plinkoRows); persist(); render(); draw();};});
   view.root.querySelectorAll('[data-plinko-risk]').forEach(button => {button.onclick = () => {if (pending) return; risk = button.dataset.plinkoRisk; persist(); render(); draw();};});
   $('.mechanical-collect').onclick = () => {
     const amount = tray; if (!amount || pending) return;
     if (wallet.deposit(amount) !== amount) {view.status('其他机台正在结算，请稍后领取'); return;}
-    tray = 0; persist(); render(); playSound(1040, .22); view.status(`已领取 ${money(amount)} USD 到钱包`);
+    tray = 0; persist(); render(); playFanfare(2); view.status(`已领取 ${money(amount)} USD 到钱包`);
   };
   wallet.subscribe(() => render());
   document.addEventListener('visibilitychange', () => {if (document.hidden) {persist(); cancelAnimationFrame(animation); animation = 0;} else resume();});
   window.addEventListener('pagehide', persist);
+  setInterval(() => {
+    if (!active || document.hidden || animation || nudge >= NUDGE_MAX) return;
+    nudge = Math.min(NUDGE_MAX, nudge + .5 / NUDGE_RECHARGE); renderNudge();
+  }, 500);
   document.addEventListener('keydown', event => {
     if (!active || document.querySelector('dialog[open]') || event.target !== document.body || event.repeat) return;
-    if (event.code === 'Space' || event.code === 'Enter') {event.preventDefault(); drop();}
+    if (event.code === 'Space' || event.code === 'Enter') {event.preventDefault(); queue = 0; drop();}
+    if (event.code === 'ArrowLeft') {event.preventDefault(); pushBall(0);}
+    if (event.code === 'ArrowRight') {event.preventDefault(); pushBall(1);}
     if (event.code === 'Escape') openLobby('games');
   });
-  return {enter() {active = true; view.enter(); render(); draw(); if (pending) {view.status('继续上次弹珠 · 无需再次扣费'); resume();}},
-    leave() {active = false; persist(); cancelAnimationFrame(animation); animation = 0; view.leave();}};
+  return {
+    enter() {active = true; view.enter(); render(); draw(); if (pending) {view.status('继续上次弹珠 · 无需再次扣费'); resume();}},
+    leave() {active = false; queue = 0; persist(); cancelAnimationFrame(animation); animation = 0; view.leave();},
+  };
 }
