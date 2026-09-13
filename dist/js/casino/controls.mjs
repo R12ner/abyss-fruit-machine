@@ -13,26 +13,28 @@ const clamp01 = value => Math.max(0, Math.min(1, value));
  * @param {number} [options.speed]    每秒扳动的行程比例
  * @param {(value:number)=>void} options.onChange 扳动过程中持续回调
  */
-export function createLever({label, value = .5, speed = .85, onChange}) {
+export function createLever({label, value = .5, onChange}) {
   const root = document.createElement('div');
   root.className = 'arcade-lever';
   root.innerHTML = `<div class="lever-gate" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="lever-plate" aria-hidden="true"></div>
+    <span class="stick-hint stick-hint-left" aria-hidden="true">◀ 左</span>
+    <span class="stick-hint stick-hint-right" aria-hidden="true">右 ▶</span>
     <div class="lever-pivot" aria-hidden="true"></div>
     <div class="lever-arm" aria-hidden="true"><span class="lever-shaft"></span><span class="lever-knob"></span></div>
-    <div class="lever-plate" aria-hidden="true"></div>
-    <button class="lever-grip lever-left" style="grid-column:1" type="button" aria-label="${label}：向左扳"></button>
-    <button class="lever-grip lever-right" style="grid-column:3" type="button" aria-label="${label}：向右扳"></button>
-    <div class="lever-readout" role="slider" tabindex="0" aria-label="${label}"
-      aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(value * 100)}"><output></output></div>`;
+    <button class="stick-grab" type="button" role="slider" aria-label="${label}"
+      aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(value * 100)}"></button>
+    <div class="lever-readout" aria-hidden="true"><output></output></div>`;
 
   const arm = root.querySelector('.lever-arm');
-  const readout = root.querySelector('.lever-readout');
+  const grab = root.querySelector('.stick-grab');
   const output = root.querySelector('output');
-  let current = clamp01(value), direction = 0, frame = 0, last = 0, disabled = false, describe = v => `${Math.round(v * 100)}`;
+  let current = clamp01(value), pointer = null, disabled = false, describe = v => `${Math.round(v * 100)}`;
 
   function paint() {
-    arm.style.setProperty('--tilt', `${(current - .5) * 2 * 26}deg`);
-    readout.setAttribute('aria-valuenow', String(Math.round(current * 100)));
+    arm.style.setProperty('--tilt', `${(current - .5) * 2 * 30}deg`);
+    grab.setAttribute('aria-valuenow', String(Math.round(current * 100)));
+    grab.setAttribute('aria-valuetext', describe(current));
     output.textContent = describe(current);
   }
   function apply(next) {
@@ -42,39 +44,33 @@ export function createLever({label, value = .5, speed = .85, onChange}) {
     paint();
     onChange?.(current);
   }
-  function tick(now) {
-    if (!direction) {frame = 0; return;}
-    const elapsed = last ? Math.min(.05, (now - last) / 1000) : 0;
-    last = now;
-    apply(current + direction * speed * elapsed);
-    frame = requestAnimationFrame(tick);
-  }
-  function hold(next) {
-    if (disabled || direction === next) return;
-    direction = next;
-    root.classList.toggle('is-left', next < 0);
-    root.classList.toggle('is-right', next > 0);
-    last = 0;
-    if (!frame) frame = requestAnimationFrame(tick);
-  }
-  function release() {
-    direction = 0;
-    root.classList.remove('is-left', 'is-right');
-    cancelAnimationFrame(frame);
-    frame = 0;
+  /** 指针横向位置直接对应杆的角度——抓住它推，不用点按钮。 */
+  function track(event) {
+    const rect = root.getBoundingClientRect();
+    const usable = rect.width - 48;
+    apply((event.clientX - rect.left - 24) / usable);
   }
 
-  for (const [selector, dir] of [['.lever-left', -1], ['.lever-right', 1]]) {
-    const grip = root.querySelector(selector);
-    grip.addEventListener('pointerdown', event => {event.preventDefault(); grip.setPointerCapture?.(event.pointerId); hold(dir);});
-    for (const name of ['pointerup', 'pointercancel', 'pointerleave']) grip.addEventListener(name, release);
-  }
-  readout.addEventListener('keydown', event => {
-    const step = event.shiftKey ? .12 : .04;
-    if (event.key === 'ArrowLeft') {event.preventDefault(); apply(current - step);}
-    if (event.key === 'ArrowRight') {event.preventDefault(); apply(current + step);}
+  grab.addEventListener('pointerdown', event => {
+    if (disabled) return;
+    pointer = event.pointerId;
+    grab.setPointerCapture?.(pointer);
+    root.classList.add('is-holding');
+    track(event);
+    event.preventDefault();
   });
-  window.addEventListener('blur', release);
+  grab.addEventListener('pointermove', event => {
+    if (disabled || event.pointerId !== pointer) return;
+    track(event);
+  });
+  for (const name of ['pointerup', 'pointercancel', 'lostpointercapture']) {
+    grab.addEventListener(name, () => {pointer = null; root.classList.remove('is-holding');});
+  }
+  grab.addEventListener('keydown', event => {
+    if (disabled || (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight')) return;
+    event.preventDefault();
+    apply(current + (event.key === 'ArrowLeft' ? -1 : 1) * (event.shiftKey ? .12 : .04));
+  });
 
   paint();
   return {
@@ -83,13 +79,14 @@ export function createLever({label, value = .5, speed = .85, onChange}) {
     set(next) {apply(next);},
     /** 让调用方决定读数怎么写（例如"左 40%"）。 */
     format(formatter) {describe = formatter; paint();},
-    hold, release,
+    /** 键盘快捷键复用：推一格。 */
+    nudge(direction) {apply(current + direction * .05);},
     disable(state) {
       disabled = !!state;
-      if (disabled) release();
+      if (disabled) {pointer = null; root.classList.remove('is-holding');}
       root.classList.toggle('is-disabled', disabled);
-      for (const grip of root.querySelectorAll('.lever-grip')) grip.disabled = disabled;
-      readout.setAttribute('aria-disabled', String(disabled));
+      grab.disabled = disabled;
+      grab.setAttribute('aria-disabled', String(disabled));
     },
   };
 }
