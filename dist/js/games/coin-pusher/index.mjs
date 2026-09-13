@@ -3,8 +3,9 @@ import {money, readState, writeState, secureRandom} from '../../casino/storage.m
 import {playTone, playClink, playFanfare, playThud} from '../../casino/audio.mjs';
 import {createShaker, createFloaters} from '../../casino/effects.mjs';
 import {createPerspective, drawCoin, drawGlass} from '../../casino/canvas.mjs';
-import {PUSHER, ZONES, createPusherState, pusherFace, startPusherRound, stepPusher,
-  tiltPusher, rechargeTilt, isPusherIdle} from './rules.mjs';
+import {createLever} from '../../casino/controls.mjs';
+import {PUSHER, ZONES, TOWER, createPusherState, pusherFace, startPusherRound, stepPusher,
+  tiltPusher, rechargeTilt, isPusherIdle, findTower} from './rules.mjs';
 
 export const coinPusherGameDefinition = Object.freeze({
   id: 'coin-pusher', badge: 'MACHINE 02', title: '深渊推币机', subtitle: 'COIN PUSHER · 瞄准 · 摇台 · 收币', cardClass: 'pusher-card',
@@ -27,7 +28,14 @@ const VIEW = Object.freeze({
   trayTop: 528, trayHeight: 48,
   plateDepth: 13,    // 推板正面的厚度
   wallFlare: 1.24,   // 机箱开口比台面宽出的比例，决定内墙的可见宽度
+  // 投币摆臂：支点在画面上方之外，末端扫过 dropLeft~dropLeft+dropSpan 这一段。
+  armPivotY: 44, armLength: 196,
 });
+
+/** 摆臂末端要落在目标 x 时的倾角。 */
+function armAngle(targetX) {
+  return Math.asin(Math.max(-1, Math.min(1, (targetX - 360) / VIEW.armLength)));
+}
 
 const perspective = createPerspective({centerX: 360, farY: VIEW.farY, nearY: VIEW.nearY, farScale: .72});
 const scaleAt = y => perspective.scale(y);
@@ -42,22 +50,29 @@ export function createCoinPusherGame({wallet, openLobby}) {
   let active = false, animation = 0, lastTime = 0, accumulator = 0, lastSave = 0, tiltTimer = 0;
   let history = Array.isArray(saved?.history) ? saved.history.filter(n => Number.isSafeInteger(n) && n >= 0).slice(0, 8) : [];
   const particles = [], shaker = createShaker(), floaters = createFloaters();
+  let towerBest = Number.isSafeInteger(saved?.towerBest) ? saved.towerBest : 0;
 
   const view = createCabinet({id: 'coin-pusher', title: '深渊推币机', english: 'THE COIN PUSHER', number: 'MACHINE 02', wallet, openLobby,
+    recordFields: [
+      {key: 'bestWin', label: '单局最高', format: value => `${money(value)} USD`},
+      {key: 'bestChain', label: '最长连锁', format: value => `${value} 连`},
+      {key: 'bestTower', label: '推落最高塔', format: value => `${value} 层`},
+    ],
     controls: `<div class="mechanical-jackpot"><span>累积彩金 <small>JACKPOT</small></span><output data-jackpot>0</output>
         <p>推落一枚 ✦ 深渊代币 即可全额带走</p></div>
-      <div class="mechanical-controls"><label class="mechanical-control-label" for="pusher-aim">投币位置 <output id="pusher-aim-value">正中</output></label>
-      <input id="pusher-aim" type="range" min="0" max="100" step="1" value="50" aria-label="选择推币机投币位置"><div class="mechanical-control-ends"><span>左</span><span>右</span></div>
+      <div class="mechanical-controls">
+      <span class="mechanical-control-label">导板角度 <output id="pusher-aim-value">正中</output></span>
+      <div id="pusher-lever-slot"></div>
       <button type="button" class="mechanical-launch" id="pusher-insert">投一枚 · 1 USD<small>INSERT COIN</small></button>
-      <button type="button" class="mechanical-burst" id="pusher-burst">连续投 5 枚 · 5 USD</button>
+      <button type="button" class="mechanical-burst arcade-plate" id="pusher-burst">连续投 5 枚 · 5 USD</button>
       <div class="mechanical-gauge"><span class="mechanical-control-label" id="pusher-tilt-label">摇台能量 <output id="pusher-tilt-value">3 / 3</output></span>
         <div class="mechanical-gauge-bar" aria-hidden="true"><i data-tilt-fill></i></div>
         <div class="mechanical-gauge-row" role="group" aria-labelledby="pusher-tilt-label">
-          <button type="button" id="pusher-tilt-left">◀ 左摇</button><button type="button" id="pusher-tilt-right">右摇 ▶</button></div></div>
+          <button type="button" class="arcade-plate" id="pusher-tilt-left">◀ 左摇</button><button type="button" class="arcade-plate" id="pusher-tilt-right">右摇 ▶</button></div></div>
       <div class="pusher-meters"><div><span>连锁 CHAIN</span><output data-chain>0</output></div>
         <div><span>侧槽回收</span><output data-recycle>0 / 10</output></div>
         <div><span>免费币</span><output data-free>0</output></div></div>
-      <p>点击台面或拖动滑杆瞄准。中央倍率区 ×2，落进侧槽会累积回收，满 10 枚返还 5 枚免费币。</p></div>`,
+      <p>按住摇柄两侧扳动机内导板，硬币从导板末端滑出。中央倍率区 ×2，前沿立着金塔。</p></div>`,
     help: `<p><b>投币</b>：每枚 1 虚拟 USD。拖动滑杆或点击台面选择位置，再按投币按钮；连续投币按当前位置投入 5 枚。有免费币时优先使用免费币，不扣钱包。</p>
       <p><b>倍率区</b>：前沿分成五段，中央 ×2，其余 ×1。从哪一段掉下来就按那一段结算，所以瞄准中路更值钱、也更难推动。</p>
       <p><b>硬币种类</b>：普通币 1 USD，✦ 金币 4 USD，✦ 深渊代币本身不值钱，但推落时可以带走全部累积彩金。每投一枚币，彩金池 +2。</p>
@@ -67,8 +82,14 @@ export function createCoinPusherGame({wallet, openLobby}) {
       <p>奖励留在出币槽，按“领取到钱包”收取。切换游戏会暂停推板，返回后继续；刷新会恢复已保存的币堆和进行中的投币。</p>`});
 
   const {context: ctx, $} = view;
-  const slider = $('#pusher-aim'); slider.value = Math.round(aim * 100);
-  const persist = () => writeState(key, {...state, settle: 0, aim, history});
+  const aimLabel = value => (Math.abs(value - .5) < .04 ? '正中' : `${value < .5 ? '左' : '右'} ${Math.round(Math.abs(value - .5) * 200)}%`);
+  const lever = createLever({
+    label: '投币导板角度', value: aim, speed: .7,
+    onChange: next => {aim = next; $('#pusher-aim-value').textContent = aimLabel(next); draw(); persist();},
+  });
+  lever.format(aimLabel);
+  $('#pusher-lever-slot').append(lever.element);
+  const persist = () => writeState(key, {...state, settle: 0, aim, history, towerBest});
 
   function render() {
     const free = state.free;
@@ -77,8 +98,8 @@ export function createCoinPusherGame({wallet, openLobby}) {
     $('#pusher-burst').disabled = !!state.pending || (free < 5 && wallet.balance() < 5) || state.coins.length > PUSHER.maxCoins - 5;
     $('#pusher-insert').innerHTML = `投一枚 · ${free >= 1 ? '免费币' : '1 USD'}<small>INSERT COIN</small>`;
     $('#pusher-burst').textContent = `连续投 5 枚 · ${free >= 5 ? '免费币' : '5 USD'}`;
-    slider.disabled = !!state.pending;
-    $('#pusher-aim-value').textContent = Math.abs(aim - .5) < .04 ? '正中' : `${aim < .5 ? '左' : '右'} ${Math.round(Math.abs(aim - .5) * 200)}%`;
+    lever.disable(!!state.pending);
+    $('#pusher-aim-value').textContent = aimLabel(aim);
     $('[data-jackpot]').textContent = money(state.jackpot);
     $('[data-chain]').textContent = String(state.chain);
     $('[data-recycle]').textContent = `${state.recycled} / ${PUSHER.recycleGoal}`;
@@ -108,7 +129,8 @@ export function createCoinPusherGame({wallet, openLobby}) {
     drawSideChannels();
     drawPlate(face);
     drawPile();
-    drawAim();
+    drawDeflector();
+    drawTowerPanel();
     drawFrontLip();
     drawTray();
     for (const particle of particles) {
@@ -150,9 +172,6 @@ export function createCoinPusherGame({wallet, openLobby}) {
     ctx.lineTo(px(PUSHER.left + 4, VIEW.deckTop), VIEW.deckTop);
     ctx.closePath();
     ctx.fillStyle = '#010402'; ctx.fill();
-    ctx.fillStyle = '#c8b686';
-    ctx.font = '13px Georgia, serif'; ctx.textAlign = 'center';
-    ctx.fillText('ABYSS · MECHANICAL COIN SYSTEM', 360, VIEW.farY + 28);
     ctx.restore();
   }
 
@@ -248,27 +267,128 @@ export function createCoinPusherGame({wallet, openLobby}) {
   /** 币堆：先按深度排序再画，近处的币才会压住远处的币。 */
   function drawPile() {
     const sorted = [...state.coins].sort((a, b) => a.y - b.y);
+    let tower = null;
     for (const coin of sorted) {
+      if (coin.kind === 'tower') {tower = coin; continue;}
       const scale = scaleAt(coin.y);
       drawCoin(ctx, px(coin.x, coin.y), coin.y, PUSHER.radius * scale, view.coins, 1, coin.kind, PUSHER.radius * .45 * scale);
     }
+    // 塔是台面上最高的东西，最后画，永远不会被周围的币盖住。
+    if (tower) drawTower(px(tower.x, tower.y), tower.y, tower.height, scaleAt(tower.y));
   }
 
-  /** 投币瞄准线：从机箱顶部一直指到落币深度。 */
-  function drawAim() {
-    const x = px(PUSHER.dropLeft + aim * PUSHER.dropSpan, VIEW.dropY);
-    const top = px(PUSHER.dropLeft + aim * PUSHER.dropSpan, VIEW.farY + 34);
+  /** 金塔：一摞立着的金币，自下而上画，顶上加一圈光。 */
+  function drawTower(screenX, y, height, scale, alpha = 1) {
+    const radius = PUSHER.radius * scale, layer = radius * .66;
     ctx.save();
-    ctx.strokeStyle = '#ffe3a188'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 7]);
-    ctx.beginPath(); ctx.moveTo(top, VIEW.farY + 34); ctx.lineTo(x, VIEW.dropY); ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = '#f2d68a';
-    ctx.beginPath();
-    ctx.moveTo(top - 10, VIEW.farY + 32); ctx.lineTo(top + 10, VIEW.farY + 32); ctx.lineTo(top, VIEW.farY + 49);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#9d8a5c'; ctx.font = '12px "Courier New", monospace'; ctx.textAlign = 'center';
-    ctx.fillText('投 币 位 置', 360, VIEW.farY - 18);
+    ctx.globalAlpha = alpha;
+    // 塔底的金色光圈：即使塔被推走，也看得出这一格是塔位
+    ctx.strokeStyle = '#ffd97788'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(screenX, y + radius * .5, radius * 1.5, radius * .6, 0, 0, Math.PI * 2); ctx.stroke();
+    // 光柱
+    const column = ctx.createLinearGradient(0, y - height * layer - 26, 0, y + radius);
+    column.addColorStop(0, '#ffd97700'); column.addColorStop(.55, '#ffd97726'); column.addColorStop(1, '#ffd97700');
+    ctx.fillStyle = column;
+    ctx.fillRect(screenX - radius * 1.5, y - height * layer - 26, radius * 3, height * layer + 26 + radius);
+    ctx.fillStyle = '#00000055';
+    ctx.beginPath(); ctx.ellipse(screenX + radius * .2, y + layer + radius * .34, radius * 1.15, radius * .46, 0, 0, Math.PI * 2); ctx.fill();
+    for (let level = 0; level < height; level++) {
+      drawCoin(ctx, screenX, y - level * layer, radius, view.coins, 1, 'gold', layer);
+    }
+    const crown = y - (height - 1) * layer;
+    ctx.shadowColor = '#ffd977'; ctx.shadowBlur = 16 * scale;
+    ctx.strokeStyle = '#ffe9a8'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(screenX, crown, radius * .82, 0, Math.PI * 2); ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.textAlign = 'center';
+    ctx.font = `bold ${Math.round(15 * scale)}px Georgia, serif`;
+    ctx.lineWidth = 3; ctx.strokeStyle = '#0c1409';
+    ctx.strokeText(`${height} 层`, screenX, crown - radius * 1.5);
+    ctx.fillStyle = '#fff3c8';
+    ctx.fillText(`${height} 层`, screenX, crown - radius * 1.5);
     ctx.restore();
+  }
+
+  /**
+   * 金塔显示器：塔被推走后先滚数字，滚定后一层层把新塔叠回原位。
+   * 叠的过程直接画在塔位上，所以能看见它一层层长出来。
+   */
+  function drawTowerPanel() {
+    const roll = state.towerRoll;
+    if (!roll) return;
+    const homeX = px(TOWER.homeX, TOWER.homeY), scale = scaleAt(TOWER.homeY);
+    if (roll.phase === 'stacking' && roll.placed > 0) drawTower(homeX, TOWER.homeY, roll.placed, scale, .92);
+    const panelY = 268;
+    ctx.save();
+    ctx.fillStyle = '#05100a';
+    ctx.beginPath(); ctx.roundRect(292, panelY, 136, 62, 9); ctx.fill();
+    ctx.strokeStyle = '#c8a95d'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#9a8a5c'; ctx.font = '10px "Courier New", monospace';
+    ctx.fillText('NEXT TOWER', 360, panelY + 16);
+    const shown = roll.phase === 'rolling'
+      ? TOWER.minHeight + Math.floor(Math.random() * (TOWER.maxHeight - TOWER.minHeight + 1))
+      : roll.target;
+    ctx.shadowColor = '#ffd977'; ctx.shadowBlur = 14;
+    ctx.fillStyle = roll.phase === 'rolling' ? '#ffe9a8' : '#8ff0ff';
+    ctx.font = 'bold 34px "Courier New", monospace';
+    ctx.fillText(String(shown), 360, panelY + 50);
+    ctx.shadowBlur = 0;
+    if (roll.phase === 'stacking') {
+      ctx.fillStyle = '#7f9b84'; ctx.font = '11px "Courier New", monospace';
+      ctx.fillText(`${roll.placed} / ${roll.target}`, 360, panelY + 76);
+    }
+    ctx.restore();
+  }
+
+  /**
+   * 投币导板：支点在画面上方之外的一条摆臂，末端带一段出币口。
+   * 摇柄扳到哪，末端就指到哪，硬币正是从末端那个口滑下去的。
+   */
+  function drawDeflector() {
+    const targetX = PUSHER.dropLeft + aim * PUSHER.dropSpan;
+    const angle = armAngle(targetX);
+    const tipX = 360 + VIEW.armLength * Math.sin(angle);
+    const tipY = VIEW.armPivotY + VIEW.armLength * Math.cos(angle);
+    ctx.save();
+    // 顶部机壳，摆臂从里面伸出来
+    const housing = ctx.createLinearGradient(0, 0, 0, 52);
+    housing.addColorStop(0, '#131a12'); housing.addColorStop(1, '#05090600');
+    ctx.fillStyle = housing; ctx.fillRect(0, 0, 720, 52);
+    // 摆臂扫过的弧线刻度
+    ctx.strokeStyle = '#d7bd7a2e'; ctx.lineWidth = 1; ctx.setLineDash([4, 8]);
+    ctx.beginPath();
+    ctx.arc(360, VIEW.armPivotY, VIEW.armLength,
+      armAngle(PUSHER.dropLeft) - Math.PI / 2, armAngle(PUSHER.dropLeft + PUSHER.dropSpan) - Math.PI / 2);
+    ctx.stroke(); ctx.setLineDash([]);
+    // 摆臂本体
+    ctx.translate(360, VIEW.armPivotY);
+    ctx.rotate(angle);
+    const arm = ctx.createLinearGradient(-18, 0, 18, 0);
+    arm.addColorStop(0, '#2b3122'); arm.addColorStop(.4, '#8d8459'); arm.addColorStop(.58, '#e6d8a4'); arm.addColorStop(1, '#343023');
+    ctx.fillStyle = arm;
+    ctx.beginPath(); ctx.roundRect(-17, 14, 34, VIEW.armLength - 22, 9); ctx.fill();
+    ctx.strokeStyle = '#00000077'; ctx.lineWidth = 1; ctx.stroke();
+    // 末端出币斗
+    ctx.fillStyle = '#0a0f09';
+    ctx.beginPath(); ctx.roundRect(-22, VIEW.armLength - 26, 44, 32, 8); ctx.fill();
+    ctx.strokeStyle = '#e3c478'; ctx.lineWidth = 2.5; ctx.stroke();
+    ctx.fillStyle = '#e3c47844';
+    ctx.beginPath(); ctx.ellipse(0, VIEW.armLength - 9, 14, 5.5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    // 支点：看得见的黄铜轴，摆臂绕它转
+    ctx.fillStyle = '#1b2018';
+    ctx.beginPath(); ctx.arc(360, VIEW.armPivotY, 26, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#b79a56'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = '#d9c98f';
+    ctx.beginPath(); ctx.arc(360, VIEW.armPivotY, 9, 0, Math.PI * 2); ctx.fill();
+    // 出币斗到台面的落点提示
+    ctx.strokeStyle = '#ffe3a166'; ctx.lineWidth = 1; ctx.setLineDash([4, 7]);
+    ctx.beginPath(); ctx.moveTo(tipX, tipY + 10); ctx.lineTo(px(targetX, VIEW.nearY), VIEW.nearY); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#9d8a5c'; ctx.font = '12px "Courier New", monospace'; ctx.textAlign = 'left';
+    ctx.fillText('投 币 导 板', 22, 28);
+    ctx.textAlign = 'center';
   }
 
   /** 前沿：金色唇口加倍率标尺，永远不会被币堆遮住。 */
@@ -334,9 +454,30 @@ export function createCoinPusherGame({wallet, openLobby}) {
       if (event.kind !== 'normal') playTone(event.kind === 'token' ? 1180 : 900, .16, {type: 'triangle', level: .09});
       return;
     }
+    if (event.type === 'tower-roll') {
+      playTone(980, .12, {type: 'square', level: .1});
+      view.status(`显示器滚出 ${event.target} —— 正在重新叠塔`);
+      return;
+    }
+    if (event.type === 'tower-stack') {
+      // 一层一响，越叠越高音调越高。
+      playTone(560 + event.level * 70, .07, {type: 'square', level: .09, sweep: 1});
+      return;
+    }
+    if (event.type === 'tower-ready') {
+      playFanfare(2); shaker.kick(4);
+      floaters.push(`新塔 ×${event.height}`, px(TOWER.homeX, TOWER.homeY), TOWER.homeY - 40,
+        {color: '#ffe07a', size: 24, life: 1.2});
+      view.status(`新的 ${event.height} 层金塔已就位`);
+      return;
+    }
     if (event.type === 'lost') {
       particles.push({...event, age: 0});
       playThud(150 + Math.random() * 30);
+      if (event.tower) {
+        floaters.push(`金塔滑进侧槽`, event.x < 360 ? 190 : 530, 400, {color: '#c9b78a', size: 22});
+        shaker.kick(8);
+      }
       if (event.refund) {
         floaters.push(`回收 +${event.refund} 免费币`, event.x < 360 ? 190 : 530, 420, {color: '#9fe6c0', size: 20});
         playFanfare(1); shaker.kick(4);
@@ -348,6 +489,11 @@ export function createCoinPusherGame({wallet, openLobby}) {
       if (event.jackpot) {
         floaters.push(`JACKPOT +${money(event.jackpot)}`, event.x, 452, {color: '#8ff0ff', size: 30, life: 1.8, rise: 96});
         playFanfare(5); shaker.kick(17);
+      } else if (event.tower) {
+        floaters.push(`金塔 ×${event.tower} +${money(event.amount)}`, event.x, 448,
+          {color: '#ffe07a', size: 32, life: 1.7, rise: 88});
+        playFanfare(4); shaker.kick(14);
+        towerBest = Math.max(towerBest, event.tower);
       } else {
         const big = event.kind === 'gold' || event.multiplier > 1;
         floaters.push(`+${event.amount}`, event.x, 470, {color: big ? '#ffe07a' : '#dcecd6', size: big ? 26 : 19});
@@ -362,6 +508,7 @@ export function createCoinPusherGame({wallet, openLobby}) {
     }
     if (event.type === 'complete') {
       history.unshift(state.lastWin); history = history.slice(0, 8);
+      view.submitRecords({bestWin: state.lastWin, bestChain: state.bestChain, bestTower: towerBest});
       view.status(state.lastWin
         ? `推落 ${money(state.lastWin)} USD · 最长连锁 ${event.chain} · 出币槽 ${money(state.tray)} USD`
         : '推板已归位 · 试试摇台或换个位置继续推进币堆');
@@ -409,13 +556,12 @@ export function createCoinPusherGame({wallet, openLobby}) {
   $('#pusher-burst').onclick = () => insert(5);
   $('#pusher-tilt-left').onclick = () => tilt(-1);
   $('#pusher-tilt-right').onclick = () => tilt(1);
-  slider.oninput = () => {aim = Number(slider.value) / 100; render(); draw(); persist();};
   view.canvas.addEventListener('pointerdown', event => {
     if (state.pending) return;
     const rect = view.canvas.getBoundingClientRect();
     const modelX = perspective.unproject((event.clientX - rect.left) / rect.width * 720, VIEW.dropY);
-    aim = Math.max(0, Math.min(1, (modelX - PUSHER.dropLeft) / PUSHER.dropSpan));
-    slider.value = Math.round(aim * 100); render(); draw(); persist();
+    lever.set(Math.max(0, Math.min(1, (modelX - PUSHER.dropLeft) / PUSHER.dropSpan)));
+    render();
   });
   $('.mechanical-collect').onclick = () => {
     const amount = state.tray; if (!amount || state.pending) return;
@@ -426,6 +572,7 @@ export function createCoinPusherGame({wallet, openLobby}) {
   document.addEventListener('visibilitychange', () => {if (document.hidden) {persist(); cancelAnimationFrame(animation); animation = 0;} else resume();});
   window.addEventListener('pagehide', persist);
   view.coins.onload = () => {if (active) draw();};
+  view.onRedraw(() => {if (active) draw();});
   // 空闲时也让摇台能量缓慢回复。
   setInterval(() => {
     if (!active || document.hidden || animation) return;
@@ -434,9 +581,14 @@ export function createCoinPusherGame({wallet, openLobby}) {
   document.addEventListener('keydown', event => {
     if (!active || document.querySelector('dialog[open]') || event.target !== document.body || event.repeat) return;
     if (event.code === 'Space' || event.code === 'Enter') {event.preventDefault(); insert(1);}
-    if (event.code === 'ArrowLeft') {event.preventDefault(); tilt(-1);}
-    if (event.code === 'ArrowRight') {event.preventDefault(); tilt(1);}
+    if (event.code === 'ArrowLeft') {event.preventDefault(); lever.hold(-1);}
+    if (event.code === 'ArrowRight') {event.preventDefault(); lever.hold(1);}
+    if (event.code === 'KeyA') {event.preventDefault(); tilt(-1);}
+    if (event.code === 'KeyD') {event.preventDefault(); tilt(1);}
     if (event.code === 'Escape') openLobby('games');
+  });
+  document.addEventListener('keyup', event => {
+    if (event.code === 'ArrowLeft' || event.code === 'ArrowRight') lever.release();
   });
   return {
     enter() {active = true; view.enter(); render(); draw(); if (!isPusherIdle(state)) {view.status('继续上次投币 · 推板运行中'); resume();}},

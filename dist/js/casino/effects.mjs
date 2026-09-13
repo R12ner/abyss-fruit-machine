@@ -1,9 +1,10 @@
-/** 画面震动与漂浮文字：两个机台共用的即时反馈特效。 */
+/** 画面震动与漂浮文字：两个机台共用的即时反馈特效。强度受全局设置的动画档位影响。 */
+import {settings} from './settings.mjs';
 
 export function createShaker() {
   let power = 0, seed = 0;
   return {
-    kick(amount) {power = Math.min(18, power + amount);},
+    kick(amount) {power = Math.min(18, power + amount * settings.motion().shake);},
     get active() {return power > .05;},
     begin(ctx, dt) {
       if (power <= .05) {power = 0; return;}

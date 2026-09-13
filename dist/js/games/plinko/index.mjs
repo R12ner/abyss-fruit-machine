@@ -39,6 +39,14 @@ const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 /** 奖励槽的三条深度基准线：槽口、正面上沿、正面下沿。 */
 const SLOT = Object.freeze({mouth: 486, top: 494, bottom: 532});
 
+/**
+ * 顶部摆板：机台自己来回晃，玩家不能控制。
+ * 球放在板上，按下释放时从板子当前所在的位置滑下去，
+ * 所以每一颗入场的位置都不一样。赔付路径仍由规则层决定，摆板只管把球送进钉阵。
+ */
+const PLATE = Object.freeze({pivotY: 40, halfWidth: 104, swing: 2.1, apexY: 78});
+const plateOffset = seconds => Math.sin(seconds * PLATE.swing) * PLATE.halfWidth;
+
 export function createPlinkoGame({wallet, openLobby}) {
   const key = 'abyss-plinko-state-v2', saved = readState(key);
   let bet = STAKES.includes(saved?.bet) ? saved.bet : 10;
@@ -52,6 +60,7 @@ export function createPlinkoGame({wallet, openLobby}) {
   let progress = pending && Number.isFinite(saved?.progress) ? clamp(saved.progress, 0, .999) : 0;
   let history = Array.isArray(saved?.history) ? saved.history.map(restorePlinkoRound).filter(Boolean).slice(0, 8) : [];
   let last = history[0] || null, active = false, animation = 0, lastTime = 0, lastPin = -1, lastSave = 0, nudgeTimer = 0;
+  let clock = 0, releaseX = 360;
   if (pending) {bet = pending.bet; risk = pending.risk; rows = pending.rows;}
 
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -59,6 +68,11 @@ export function createPlinkoGame({wallet, openLobby}) {
   const durationFor = count => (reduced ? 1.3 : 2.6 + count * .11);
 
   const view = createCabinet({id: 'plinko', title: '深渊弹珠机', english: 'THE PLINKO CLUB', number: 'MACHINE 03', wallet, openLobby,
+    recordFields: [
+      {key: 'bestPayout', label: '单颗最高', format: value => `${money(value)} USD`},
+      {key: 'bestMultiplier', label: '最大倍率', format: value => `×${value / 10}`},
+      {key: 'bestGold', label: '单颗金钉', format: value => `${value} 枚`},
+    ],
     controls: `<div class="mechanical-energy"><span>深渊能量 <small>CHARGE</small></span>
         <div class="mechanical-energy-bar" aria-hidden="true"><i data-energy-fill></i></div>
         <output data-energy>0 / ${ENERGY_GOAL}</output><p data-energy-hint>投球 +${ENERGY_PER_DROP}，命中金钉 +${ENERGY_PER_GOLD}。充满后下一颗是 ×${CHARGED_MULTIPLIER} 深渊之球。</p></div>
@@ -70,17 +84,18 @@ export function createPlinkoGame({wallet, openLobby}) {
       <span class="mechanical-control-label" id="plinko-risk-label">倍率档位 <output id="plinko-risk-value">经典</output></span>
       <div class="mechanical-risk mechanical-risk-4" role="group" aria-labelledby="plinko-risk-label">${RISK_KEYS.map(name => `<button type="button" data-plinko-risk="${name}" aria-pressed="false">${RISKS[name].label}</button>`).join('')}</div>
       <button type="button" class="mechanical-launch" id="plinko-drop">释放弹珠 · 10 USD<small>DROP THE BALL</small></button>
-      <button type="button" class="mechanical-burst" id="plinko-multi">连发 3 颗</button>
+      <button type="button" class="mechanical-burst arcade-plate" id="plinko-multi">连发 3 颗</button>
       <div class="mechanical-gauge"><span class="mechanical-control-label" id="plinko-nudge-label">推球 <output id="plinko-nudge-value">2 / ${NUDGE_MAX}</output></span>
         <div class="mechanical-gauge-bar" aria-hidden="true"><i data-nudge-fill></i></div>
         <div class="mechanical-gauge-row" role="group" aria-labelledby="plinko-nudge-label">
-          <button type="button" id="plinko-nudge-left">◀ 左推</button><button type="button" id="plinko-nudge-right">右推 ▶</button></div></div>
+          <button type="button" class="arcade-plate" id="plinko-nudge-left">◀ 左推</button><button type="button" class="arcade-plate" id="plinko-nudge-right">右推 ▶</button></div></div>
       <p>穿过钉阵按落点倍率得币。倍率包含本金，越靠两侧越难命中。</p></div>`,
     help: `<p><b>基本玩法</b>：选择面额、层数和档位，按“释放弹珠”立即扣费。每层碰钉后左右机会相同，落入 层数+1 个奖励槽之一。奖励 = 面额 × 落点倍率，已包含本金。</p>
       <p><b>层数</b>：8 层节奏最快、落点少；12 层是标准盘；16 层最长，两侧倍率也最高。层数变化时整张赔付表会重算。</p>
       <p><b>档位</b>：低风险 / 经典 / 高倍 / 深渊。越往上中央越薄、边缘越夸张，16 层深渊档边槽可达数百倍。</p>
       <p><b>金钉</b>：每颗球开局随机点亮 ${GOLD_PEGS} 枚金钉。球撞到一枚金钉，最终倍率额外 +${goldBonusTenths(12) / 10}（随层数缩放），同时能量 +${ENERGY_PER_GOLD}。</p>
       <p><b>深渊能量</b>：每投一球 +${ENERGY_PER_DROP}，命中金钉再 +${ENERGY_PER_GOLD}。攒满 ${ENERGY_GOAL} 点后，下一颗自动变成 ×${CHARGED_MULTIPLIER} 深渊之球，赔付整体翻倍。</p>
+      <p><b>顶部摆板</b>：机台顶上那块托盘一直自己左右晃，不受玩家控制。按下释放时球从托盘当时所在的位置滑进钉阵，所以每颗球的入场点都不一样。摆板只负责把球送进去，落点仍由钉阵逐层决定。</p>
       <p><b>推球</b>：落球途中按左右方向键（或按钮）可以把下一层的碰钉结果拨向指定一侧，每颗球最多用 ${NUDGE_MAX} 次，能量约每 ${NUDGE_RECHARGE} 秒回复 1 次。落点和金钉命中会立刻重算。</p>
       <p>落球期间不能改面额、层数或档位。切换游戏会暂停动画；刷新后会继续已扣费的同一颗弹珠，不会重新抽取结果。结果进入出币槽，按“领取到钱包”收取。</p>`});
 
@@ -151,8 +166,6 @@ export function createPlinkoGame({wallet, openLobby}) {
     strokeGoldBezel(ctx, {width: 3});
     ctx.strokeStyle = '#d1b26433'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(360, 86); ctx.lineTo(641, 512); ctx.lineTo(79, 512); ctx.closePath(); ctx.stroke();
-    ctx.fillStyle = '#a8bda1'; ctx.textAlign = 'center'; ctx.font = '14px Georgia, serif';
-    ctx.fillText(`ABYSS · PLINKO · ${count} ROWS`, 360, 28);
 
     const ball = pending ? plinkoPosition(pending, progress) : null;
     const columns = pending ? pathColumns(pending.directions) : null;
@@ -211,6 +224,7 @@ export function createPlinkoGame({wallet, openLobby}) {
       }
     });
 
+    drawPlate();
     if (pending) {
       trail.forEach((point, index) => {
         ctx.globalAlpha = (index + 1) / trail.length * (pending.charged ? .34 : .2);
@@ -218,14 +232,20 @@ export function createPlinkoGame({wallet, openLobby}) {
         ctx.beginPath(); ctx.arc(point.x, point.y, 5, 0, Math.PI * 2); ctx.fill();
       });
       ctx.globalAlpha = 1;
-      drawBall(ball.x, ball.y, pending.charged);
+      // 前 12% 的行程是"从摆板滑进钉阵"，之后交给规则层给出的路径。
+      const entry = Math.min(1, progress / .12);
+      const x = entry < 1 ? releaseX + (ball.x - releaseX) * entry : ball.x;
+      const y = entry < 1 ? PLATE.pivotY - 12 + (ball.y - (PLATE.pivotY - 12)) * entry : ball.y;
+      drawBall(x, y, pending.charged);
       if (pending.goldHits) {
         ctx.fillStyle = '#ffd678'; ctx.font = '15px Georgia'; ctx.textAlign = 'center';
         ctx.fillText(`金钉 ×${pending.goldHits} · +${pending.bonusTenths / 10}`, 360, 62);
       }
     } else {
       const resting = last && last.risk === risk && last.rows === rows;
-      drawBall(resting ? geometry.slotCenter(last.slot) : 360, resting ? 480 : 53, energy >= ENERGY_GOAL);
+      // 没有落球时，球停在摆板上跟着一起晃。
+      if (resting) drawBall(geometry.slotCenter(last.slot), 480, false);
+      drawBall(360 + plateOffset(clock), PLATE.pivotY - 12, energy >= ENERGY_GOAL);
     }
     drawGlass(ctx);
     floaters.draw(ctx);
@@ -233,6 +253,31 @@ export function createPlinkoGame({wallet, openLobby}) {
     ctx.fillText(`${RISKS[currentRisk()].label}档 · ${count} 层钉阵 · ${count + 1} 个落点${pending ? ` · 推球剩 ${NUDGE_MAX - pending.nudged.length}` : ''}`, 360, 574);
     shaker.end(ctx);
   }
+  /** 顶部摆板：一块带金属边的托盘，绕中心左右晃动，末端是球的出口。 */
+  function drawPlate() {
+    const offset = plateOffset(clock);
+    const tilt = Math.cos(clock * PLATE.swing) * .13;
+    ctx.save();
+    ctx.translate(360 + offset, PLATE.pivotY);
+    ctx.rotate(tilt);
+    const body = ctx.createLinearGradient(0, -9, 0, 11);
+    body.addColorStop(0, '#e6d8a4'); body.addColorStop(.45, '#8d8459'); body.addColorStop(1, '#2c2718');
+    ctx.fillStyle = body;
+    ctx.beginPath(); ctx.roundRect(-44, -8, 88, 18, 6); ctx.fill();
+    ctx.strokeStyle = '#5a4d2b'; ctx.lineWidth = 1; ctx.stroke();
+    // 托盘中间的凹槽，球就卡在这里
+    ctx.fillStyle = '#0d120c';
+    ctx.beginPath(); ctx.roundRect(-13, -6, 26, 9, 4); ctx.fill();
+    ctx.restore();
+    // 导轨与支架
+    ctx.strokeStyle = '#8a7440'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(360 - PLATE.halfWidth - 52, PLATE.pivotY + 14);
+    ctx.lineTo(360 + PLATE.halfWidth + 52, PLATE.pivotY + 14); ctx.stroke();
+    ctx.strokeStyle = '#d7bd7a33'; ctx.lineWidth = 1; ctx.setLineDash([3, 6]);
+    ctx.beginPath(); ctx.moveTo(360 + offset, PLATE.pivotY + 14); ctx.lineTo(360, PLATE.apexY); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
   function drawBall(x, y, charged) {
     ctx.shadowColor = charged ? '#8fe6ff' : '#f4e8ab'; ctx.shadowBlur = charged ? 22 : 13;
     const ball = ctx.createRadialGradient(x - 3, y - 4, 0, x, y, 9);
@@ -258,6 +303,7 @@ export function createPlinkoGame({wallet, openLobby}) {
     view.status(`${round.charged ? '深渊之球 · ' : ''}落入第 ${round.slot + 1} 槽 · ×${round.multiplier}` +
       `${round.goldHits ? `（金钉 ${round.goldHits} 枚 +${round.bonusTenths / 10}）` : ''} · 得币 ${money(round.payout)} USD` +
       `${energy >= ENERGY_GOAL ? ' · 能量已满，下一颗是深渊之球' : ''}`);
+    view.submitRecords({bestPayout: round.payout, bestMultiplier: Math.round(round.multiplier * 10), bestGold: round.goldHits});
     persist(); render(); draw();
     if (queue > 0) {queue--; persist(); render(); setTimeout(() => {if (active) drop(true);}, reduced ? 200 : 620);}
   }
@@ -265,6 +311,7 @@ export function createPlinkoGame({wallet, openLobby}) {
   function tick(now) {
     if (!active || document.hidden) {animation = 0; return;}
     const elapsed = lastTime ? Math.min(.07, (now - lastTime) / 1000) : 0; lastTime = now;
+    clock += elapsed;
     nudgeTimer += elapsed;
     if (nudge < NUDGE_MAX) {nudge = Math.min(NUDGE_MAX, nudge + elapsed / NUDGE_RECHARGE); if (nudgeTimer > .25) {nudgeTimer = 0; renderNudge();}}
     for (let i = flashes.length - 1; i >= 0; i--) if ((flashes[i].age += elapsed) > .42) flashes.splice(i, 1);
@@ -290,7 +337,8 @@ export function createPlinkoGame({wallet, openLobby}) {
       if (now - lastSave > 700) {persist(); lastSave = now;}
     }
     draw(elapsed);
-    animation = pending || flashes.length || floaters.length || shaker.active ? requestAnimationFrame(tick) : 0;
+    // 摆板一直在晃，所以空闲时也要继续出帧。
+    animation = active && !document.hidden ? requestAnimationFrame(tick) : 0;
   }
   function resume() {if (active && !document.hidden && !animation) {lastTime = 0; animation = requestAnimationFrame(tick);}}
 
@@ -304,6 +352,7 @@ export function createPlinkoGame({wallet, openLobby}) {
       queue = 0;
       view.status('钱包余额不足，或其他机台正在结算'); render(); return;
     }
+    releaseX = 360 + plateOffset(clock);
     pending = round; progress = 0; lastPin = -1; trail.length = 0; flashes.length = 0;
     persist(); render();
     view.status(`${charged ? '深渊之球释放 · 赔付 ×' + CHARGED_MULTIPLIER : '弹珠穿过钉阵'} · 金钉 ${round.gold.length} 枚${fromQueue ? ` · 连发剩 ${queue} 颗` : ''}`);
@@ -338,6 +387,7 @@ export function createPlinkoGame({wallet, openLobby}) {
     tray = 0; persist(); render(); playFanfare(2); view.status(`已领取 ${money(amount)} USD 到钱包`);
   };
   wallet.subscribe(() => render());
+  view.onRedraw(() => {if (active) draw();});
   document.addEventListener('visibilitychange', () => {if (document.hidden) {persist(); cancelAnimationFrame(animation); animation = 0;} else resume();});
   window.addEventListener('pagehide', persist);
   setInterval(() => {
@@ -352,7 +402,7 @@ export function createPlinkoGame({wallet, openLobby}) {
     if (event.code === 'Escape') openLobby('games');
   });
   return {
-    enter() {active = true; view.enter(); render(); draw(); if (pending) {view.status('继续上次弹珠 · 无需再次扣费'); resume();}},
+    enter() {active = true; view.enter(); render(); draw(); resume(); if (pending) view.status('继续上次弹珠 · 无需再次扣费');},
     leave() {active = false; queue = 0; persist(); cancelAnimationFrame(animation); animation = 0; view.leave();},
   };
 }

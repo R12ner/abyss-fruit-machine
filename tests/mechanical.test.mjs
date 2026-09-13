@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {
-  PUSHER, ZONES, COIN_VALUE, createPusherState, startPusherRound, stepPusher, tiltPusher, rechargeTilt,
-  isPusherIdle, zoneMultiplier, isSideExit, rollCoinKinds,
+  PUSHER, ZONES, TOWER, COIN_VALUE, createPusherState, startPusherRound, stepPusher, tiltPusher, rechargeTilt,
+  isPusherIdle, zoneMultiplier, isSideExit, rollCoinKinds, coinFaceValue, findTower, rollTowerHeight,
 } from '../dist/js/games/coin-pusher/rules.mjs';
 import {
   ROW_OPTIONS, RISK_KEYS, STAKES, PAYTABLES, GOLD_PEGS, ENERGY_GOAL, NUDGE_MAX, CHARGED_MULTIPLIER,
@@ -145,7 +145,7 @@ for (const rows of ROW_OPTIONS) {
 
 function finish(state) {
   let steps = 0;
-  while (!isPusherIdle(state) && steps++ < 900) stepPusher(state, 1 / 120);
+  while (!isPusherIdle(state) && steps++ < 3000) stepPusher(state, 1 / 120);
   assert.equal(state.pending, null);
 }
 
@@ -171,9 +171,10 @@ assert.equal(isSideExit(360), false);
 // 一整轮：扣费、彩金累积、存档中途恢复必须完全一致。
 const state = createPusherState();
 assert.equal(state.jackpot, PUSHER.jackpotSeed);
-assert.equal(state.coins.length, 220);
+assert.equal(state.coins.length, 221, '220 枚币加一座金塔');
 assert(state.coins.some(coin => coin.kind === 'gold'), '开局币堆里要有金币');
 assert(state.coins.some(coin => coin.kind === 'token'), '开局币堆里要有深渊代币');
+assert.equal(state.coins.filter(coin => coin.kind === 'tower').length, 1, '台面上只能有一座金塔');
 assert.equal(startPusherRound(state, 5, .5, () => .99), true);
 // 彩金按小数累积，只有整数部分进池，池子永远是整数。
 assert.equal(state.jackpot, PUSHER.jackpotSeed);
@@ -271,11 +272,87 @@ assert.equal(JSON.stringify(state), done);
   assert(shake.coins.every(coin => coin.x >= 60 && coin.x <= 660), '摇台后硬币不能飞出台面');
 }
 
+// 金塔：按层数计价、只存在一座、推落后确定性地重建。
+{
+  assert.equal(coinFaceValue({kind: 'tower', height: 6}), 6 * TOWER.coinValue);
+  assert.equal(coinFaceValue({kind: 'gold'}), COIN_VALUE.gold);
+  for (const roll of [0, .5, .999]) {
+    const height = rollTowerHeight(() => roll);
+    assert(height >= TOWER.minHeight && height <= TOWER.maxHeight, `抽到的塔高 ${height} 超范围`);
+  }
+
+  // 从前沿 ×2 区推落：按 层数 × 单层 × 倍率 结算，并立刻进入重建。
+  const fall = createPusherState({version: 2, tray: 0, nextTower: 7,
+    coins: [{x: 360, y: PUSHER.edge + 1, kind: 'tower', height: 4}]});
+  fall.settle = 1;
+  const win = stepPusher(fall, 1 / 120).find(event => event.type === 'win');
+  assert.equal(win.tower, 4);
+  assert.equal(win.amount, 4 * TOWER.coinValue * 2, '中央 ×2 区的塔要按倍率结算');
+  assert.equal(fall.tray, win.amount);
+  assert.equal(findTower(fall), null, '塔推落后台面上不该还有塔');
+  assert.equal(fall.towerRoll.target, 7, '重建高度必须用事先抽好的 nextTower');
+  assert.equal(isPusherIdle(fall), false, '重建期间机台不算空闲');
+
+  // 重建：先滚数字，再一层层叠满，最后落位成一座 7 层塔。
+  const stacked = [];
+  let guard = 0;
+  while (fall.towerRoll && guard++ < 4000) {
+    for (const event of stepPusher(fall, 1 / 120)) {
+      if (event.type === 'tower-stack') stacked.push(event.level);
+      if (event.type === 'tower-ready') assert.equal(event.height, 7);
+    }
+  }
+  assert.deepEqual(stacked, [1, 2, 3, 4, 5, 6, 7], '每一层都要单独报一次，供音效逐层响');
+  const rebuilt = findTower(fall);
+  assert.equal(rebuilt.height, 7);
+  assert.equal(rebuilt.x, TOWER.homeX);
+  assert.equal(rebuilt.y, TOWER.homeY);
+  assert.equal(isPusherIdle(fall), true);
+
+  // 掉进侧槽的塔只回收不给钱，但同样要重建。
+  const lost = createPusherState({version: 2, tray: 0, nextTower: 3,
+    coins: [{x: PUSHER.frontLeft - 2, y: 400, kind: 'tower', height: 5}]});
+  lost.settle = 1;
+  const events = stepPusher(lost, 1 / 120);
+  assert.equal(events.find(event => event.type === 'win'), undefined, '侧槽不结算');
+  assert.equal(events.find(event => event.type === 'lost').tower, 5);
+  assert.equal(lost.tray, 0);
+  assert.equal(lost.towerRoll.target, 3);
+
+  // 存档里塞两座塔只保留一座；缺塔的存档会自动补建。
+  assert.equal(createPusherState({version: 2, coins: [
+    {x: 300, y: 300, kind: 'tower', height: 4},
+    {x: 400, y: 300, kind: 'tower', height: 6},
+  ]}).coins.filter(coin => coin.kind === 'tower').length, 1);
+  assert(createPusherState({version: 2, coins: []}).towerRoll, '存档没有塔时要排一次重建');
+  assert.equal(createPusherState({version: 2, coins: [{x: 360, y: 300, kind: 'tower', height: 99}]}).coins[0].height,
+    TOWER.minHeight, '越界的塔高要被清洗');
+
+  // 重建过程中刷新：进度、目标高度和后续每一层都必须完全一致。
+  const live = createPusherState({version: 2, tray: 0, nextTower: 6,
+    coins: [{x: 360, y: PUSHER.edge + 1, kind: 'tower', height: 4}]});
+  live.settle = 1;
+  stepPusher(live, 1 / 120);
+  for (let i = 0; i < 80; i++) stepPusher(live, 1 / 120);
+  const resumed = createPusherState(JSON.parse(JSON.stringify(live)));
+  assert.deepEqual(resumed.towerRoll, live.towerRoll, '重建进度要原样恢复');
+  const tail = state => {
+    const seen = [];
+    let steps = 0;
+    while (state.towerRoll && steps++ < 4000) {
+      for (const event of stepPusher(state, 1 / 120)) if (event.type.startsWith('tower')) seen.push(event.type + ':' + (event.level ?? event.height ?? event.target));
+    }
+    return seen;
+  };
+  assert.deepEqual(tail(resumed), tail(live), '刷新后重建的每一步都要一致');
+  assert.equal(findTower(resumed).height, findTower(live).height);
+}
+
 // 旧版本存档必须被丢弃并重建币堆，坏数据不会带进新局。
-assert.equal(createPusherState({version: 1, coins: [{x: 300, y: 300}], tray: 9}).coins.length, 220);
-assert.equal(createPusherState({version: 2, coins: [{x: NaN, y: 200}]}).coins.length, 220);
+assert.equal(createPusherState({version: 1, coins: [{x: 300, y: 300}], tray: 9}).coins.length, 221);
+assert.equal(createPusherState({version: 2, coins: [{x: NaN, y: 200}]}).coins.length, 221);
 assert.equal(createPusherState({version: 2, coins: [], jackpot: -5}).jackpot, PUSHER.jackpotSeed);
 assert.equal(createPusherState({version: 2, coins: [{x: 300, y: 300, kind: 'hack'}]}).coins[0].kind, 'normal');
 
 console.log('mechanical games: 12 paytables + RTP bounds, 8/12/16-row exhaustive drops, gold pegs, nudges,',
-  'charged balls, pusher zones, jackpot tokens, chains, recycling, tilt and save recovery passed');
+  'charged balls, pusher zones, jackpot tokens, chains, recycling, tilt, gold tower rebuild and save recovery passed');

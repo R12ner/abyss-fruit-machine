@@ -1,0 +1,385 @@
+/*
+ * 街机实体控制件：摇柄、凸起圆钮、金属压板、老式计数轮、设置面板。
+ * 目标是"看起来能按下去"——每个件都有金属圈、行程和落影，
+ * 按下时真的往下沉，而不是换个背景色。
+ */
+
+/* ---------- 凸起圆钮（顶栏的音效 / 设置 / 问号） ---------- */
+
+.mechanical-game .arcade-dome{
+  width:46px;height:46px;
+  padding:0!important;
+  border:0!important;
+  border-radius:50%!important;
+  background:
+    radial-gradient(circle at 36% 26%,#ffffffaa 0 6%,#ffffff33 16%,transparent 44%),
+    radial-gradient(circle at 50% 62%,#3f4a39 0 44%,#222a1f 72%,#12180f 100%)!important;
+  box-shadow:
+    0 0 0 3px #7d7250,
+    0 0 0 5px #14170f,
+    inset 0 5px 9px #ffffff1f,
+    inset 0 -7px 13px #00000077,
+    0 5px 0 #0b0e09,
+    0 9px 14px #000a!important;
+  color:#e7d792;
+  font:700 19px var(--font-serif)!important;
+  text-shadow:0 1px 2px #000;
+  transition:transform .09s,box-shadow .09s;
+}
+.mechanical-game .arcade-dome:hover:not(:disabled){filter:brightness(1.16)}
+.mechanical-game .arcade-dome:active:not(:disabled){
+  transform:translateY(5px);
+  box-shadow:0 0 0 3px #7d7250,0 0 0 5px #14170f,inset 0 6px 12px #000000aa,0 0 0 #0b0e09!important;
+}
+.mechanical-game .arcade-dome[aria-pressed=true]{
+  background:
+    radial-gradient(circle at 36% 26%,#fff8d8cc 0 6%,#ffe9a855 16%,transparent 44%),
+    radial-gradient(circle at 50% 62%,#c9a54e 0 44%,#7a5f26 72%,#3f3113 100%)!important;
+  color:#fff6d2;
+}
+
+/* ---------- 金属压板按钮（连发 / 摇台 / 领取） ---------- */
+
+.mechanical-game .arcade-plate{
+  position:relative;
+  border:1px solid #6b6244!important;
+  border-radius:7px!important;
+  background:
+    linear-gradient(#3a4132,#222a1c)!important;
+  box-shadow:
+    inset 0 1px 0 #ffffff2b,
+    inset 0 -2px 5px #00000066,
+    0 4px 0 #12160f,
+    0 7px 12px #0009!important;
+  color:#e9dcae;
+  letter-spacing:2px;
+}
+/* 拉丝纹理 */
+.mechanical-game .arcade-plate:before{
+  content:"";
+  position:absolute;
+  inset:2px;
+  border-radius:5px;
+  background:repeating-linear-gradient(90deg,#ffffff08 0 1px,transparent 1px 4px);
+  pointer-events:none;
+}
+.mechanical-game .arcade-plate:active:not(:disabled){
+  transform:translateY(4px);
+  box-shadow:inset 0 2px 6px #000000aa,0 0 0 #12160f!important;
+}
+
+/* ---------- 键帽按钮（返回大厅） ---------- */
+
+.mechanical-game .arcade-key{
+  border:1px solid #5f5d45!important;
+  border-radius:8px!important;
+  background:linear-gradient(#2a3125,#151a12)!important;
+  box-shadow:inset 0 1px 0 #ffffff24,0 4px 0 #0a0d08,0 7px 11px #0009!important;
+  color:#d8c787;
+}
+.mechanical-game .arcade-key:active:not(:disabled){
+  transform:translateY(4px);
+  box-shadow:inset 0 2px 6px #000a,0 0 0 #0a0d08!important;
+}
+
+/* ---------- 摇柄 ---------- */
+
+.arcade-lever{
+  position:relative;
+  height:132px;
+  margin:2px 0 6px;
+  display:grid;
+  /* 中间这一列是摇杆和底座的地盘，两侧才是扳动键 */
+  grid-template-columns:1fr 150px 1fr;
+  align-items:end;
+  gap:8px;
+  padding-bottom:30px;
+}
+/* 底座金属板 */
+.lever-plate{
+  position:absolute;
+  left:50%;bottom:28px;
+  width:168px;height:30px;
+  transform:translateX(-50%);
+  border-radius:8px / 12px;
+  background:linear-gradient(#4a5140,#252b1f 55%,#11150e);
+  box-shadow:inset 0 1px 0 #ffffff26,0 5px 12px #000b;
+}
+/* 刻度槽 */
+.lever-gate{
+  position:absolute;
+  left:50%;bottom:41px;
+  width:140px;height:11px;
+  transform:translateX(-50%);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 8px;
+  border-radius:99px;
+  background:linear-gradient(#050804,#131810);
+  box-shadow:inset 0 3px 6px #000,inset 0 -1px 0 #ffffff14;
+}
+.lever-gate i{width:2px;height:5px;border-radius:1px;background:#6f7a5e}
+.lever-gate i:nth-child(3){height:8px;background:#c9ad63}
+/* 枢轴球 */
+.lever-pivot{
+  position:absolute;
+  left:50%;bottom:39px;
+  width:26px;height:26px;
+  transform:translateX(-50%);
+  border-radius:50%;
+  background:radial-gradient(circle at 36% 30%,#d9cf9f,#6c6647 55%,#22271a);
+  box-shadow:0 2px 5px #000b;
+}
+/* 摇杆本体：绕底部枢轴倾斜 */
+.lever-arm{
+  position:absolute;
+  left:50%;bottom:46px;
+  width:24px;height:66px;
+  transform-origin:50% 100%;
+  transform:translateX(-50%) rotate(var(--tilt,0deg));
+  transition:transform .06s linear;
+  pointer-events:none;
+}
+.lever-shaft{
+  position:absolute;
+  left:50%;bottom:0;
+  width:11px;height:100%;
+  transform:translateX(-50%);
+  border-radius:5px 5px 2px 2px;
+  background:linear-gradient(90deg,#3d4232,#b8b087 40%,#e8dcae 52%,#6a6446 78%,#2a2e20);
+  box-shadow:0 2px 6px #000a;
+}
+.lever-knob{
+  position:absolute;
+  left:50%;top:-9px;
+  width:30px;height:30px;
+  transform:translateX(-50%);
+  border-radius:50%;
+  background:
+    radial-gradient(circle at 34% 26%,#ffffffcc 0 8%,#ffffff33 20%,transparent 46%),
+    radial-gradient(circle at 50% 60%,#c2453c 0 44%,#7e1f1c 76%,#4a1210 100%);
+  box-shadow:0 0 0 2px #2b1410,0 4px 8px #000c,inset 0 -4px 8px #00000066;
+}
+/* 左右扳动区 */
+.mechanical-game .arcade-lever .lever-grip{
+  position:relative;
+  z-index:2;
+  min-height:50px;
+  align-self:end;
+  margin-bottom:18px;
+  border:1px solid #5b6349!important;
+  border-radius:9px!important;
+  background:linear-gradient(#2b3326,#141a12)!important;
+  box-shadow:inset 0 1px 0 #ffffff1f,0 3px 0 #0a0d08,0 6px 10px #0009!important;
+  color:#cdd6c0;
+  font-size:18px!important;
+}
+.mechanical-game .arcade-lever .lever-left:after{content:"◀"}
+.mechanical-game .arcade-lever .lever-right:after{content:"▶"}
+.mechanical-game .arcade-lever .lever-grip:active:not(:disabled),
+.arcade-lever.is-left .lever-left,
+.arcade-lever.is-right .lever-right{
+  transform:translateY(3px);
+  border-color:#e0c66e!important;
+  background:linear-gradient(#6d5a31,#3a2f16)!important;
+  box-shadow:inset 0 2px 6px #000a!important;
+  color:#ffeeb6;
+}
+/* 读数 */
+.lever-readout{
+  position:absolute;
+  left:50%;bottom:2px;
+  transform:translateX(-50%);
+  min-width:104px;
+  padding:3px 12px;
+  border:1px solid #4f5a3f;
+  border-radius:5px;
+  background:#050b06;
+  box-shadow:inset 0 2px 5px #000;
+  color:#e6cc85;
+  font:12px var(--font-mono);
+  text-align:center;
+  cursor:ew-resize;
+}
+.lever-readout:focus-visible{outline:3px solid var(--gold-bright);outline-offset:3px}
+.arcade-lever.is-disabled{opacity:.45}
+.arcade-lever.is-disabled .lever-knob{filter:grayscale(.6)}
+
+/* ---------- 老式计数轮 ---------- */
+
+.mechanical-counter{
+  display:flex;
+  gap:3px;
+  margin-top:10px;
+}
+.mechanical-counter i{
+  position:relative;
+  flex:0 0 auto;
+  width:30px;height:46px;
+  display:grid;
+  place-items:center;
+  border-radius:4px;
+  background:linear-gradient(#1b1f16,#080c07 46%,#1b1f16);
+  box-shadow:inset 0 0 0 1px #000,inset 0 6px 10px #00000099,0 1px 0 #ffffff12;
+  overflow:hidden;
+}
+/* 轮子中缝 */
+.mechanical-counter i:after{
+  content:"";
+  position:absolute;
+  left:0;right:0;top:50%;
+  height:1px;
+  background:#00000099;
+  box-shadow:0 1px 0 #ffffff10;
+}
+.mechanical-counter b{
+  font:700 30px/1 var(--font-mono);
+  font-variant-numeric:tabular-nums;
+  color:var(--signal-amber);
+  text-shadow:0 0 12px #debd5977;
+  animation:counter-roll .18s ease-out;
+}
+@keyframes counter-roll{from{transform:translateY(-42%);opacity:.15}to{transform:none;opacity:1}}
+
+/* ---------- 纪录墙 ---------- */
+
+.mechanical-records{padding:14px 16px;background:#070e09}
+.mechanical-records>span{
+  display:flex;
+  justify-content:space-between;
+  align-items:baseline;
+  gap:8px;
+  margin-bottom:10px;
+  color:#8f9c86;
+  font-size:13px;
+  letter-spacing:2px;
+}
+.mechanical-records small{font-size:10px;color:#6f7a63}
+.mechanical-records dl{margin:0;display:grid;gap:6px}
+.mechanical-records dl>div{
+  display:flex;
+  justify-content:space-between;
+  align-items:baseline;
+  gap:10px;
+  padding:6px 9px;
+  border:1px solid #3c4735;
+  border-radius:7px;
+  background:linear-gradient(#101a12,#070d09);
+}
+.mechanical-records dt{color:#93a68f;font-size:12px}
+.mechanical-records dd{
+  margin:0;
+  color:#e8cf8f;
+  font:700 14px var(--font-mono);
+  font-variant-numeric:tabular-nums;
+}
+
+/* ---------- 设置面板 ---------- */
+
+.arcade-settings{
+  width:min(560px,calc(100vw - 28px));
+  max-height:88vh;
+  padding:32px;
+  border:1px solid #9b8753;
+  border-radius:16px;
+  background:radial-gradient(circle at 50% 0,#16301f,#090f0b 68%);
+  color:#d8d0b0;
+  box-shadow:0 24px 90px #000;
+  font:14px/1.7 var(--font-mono);
+}
+.arcade-settings::backdrop{background:#000c}
+.arcade-settings>small{font-size:10px;letter-spacing:3px;color:#958967}
+.arcade-settings h2{margin:6px 0 18px;color:#ead79b;font:700 28px var(--font-serif);letter-spacing:2px}
+.arcade-settings h3{margin:0 0 8px;color:#cdbd84;font:600 14px var(--font-serif);letter-spacing:3px}
+.arcade-settings section{
+  margin-bottom:18px;
+  padding:16px;
+  border:1px solid #46523c;
+  border-radius:11px;
+  background:#0a130d;
+}
+.arcade-settings section p{margin:0 0 10px;color:#8fa089;font-size:12px}
+.arcade-settings button{
+  min-height:42px;
+  border:1px solid #5b6349;
+  border-radius:8px;
+  background:linear-gradient(#2b3326,#141a12);
+  box-shadow:inset 0 1px 0 #ffffff1c,0 3px 0 #0a0d08;
+  color:#d6cfa8;
+  font:13px var(--font-mono);
+  cursor:pointer;
+  transition:transform .1s,box-shadow .1s;
+}
+.arcade-settings button:active{transform:translateY(3px);box-shadow:inset 0 2px 6px #000a}
+.arcade-settings button[aria-pressed=true]{
+  border-color:var(--gold-bright);
+  background:linear-gradient(#7d6838,#443616);
+  box-shadow:inset 0 0 0 1px #be9d48,0 0 16px #d7bd5d44;
+  color:#fff0bc;
+}
+.arcade-settings-close{
+  float:right;
+  width:42px;height:42px;
+  padding:0;
+  border-radius:50%!important;
+  font-size:22px!important;
+}
+.arcade-settings-done{width:100%;margin-top:4px}
+
+.settings-skins{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.settings-skins button{display:grid;justify-items:center;gap:6px;padding:10px 4px;min-height:92px}
+.settings-skins img{width:42px;height:42px;object-fit:contain;filter:drop-shadow(0 3px 3px #000a)}
+.settings-skins span{font-size:11px}
+.settings-motion{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+
+.settings-switch{display:flex;align-items:center;gap:11px;cursor:pointer;font-size:13px}
+.settings-switch input{position:absolute;opacity:0;width:0;height:0}
+.switch-track{
+  position:relative;
+  width:52px;height:27px;
+  flex:0 0 auto;
+  border:1px solid #4d5a41;
+  border-radius:99px;
+  background:#080f09;
+  box-shadow:inset 0 2px 5px #000;
+  transition:background .15s,border-color .15s;
+}
+.switch-track i{
+  position:absolute;
+  left:2px;top:2px;
+  width:21px;height:21px;
+  border-radius:50%;
+  background:radial-gradient(circle at 36% 30%,#e6dcb2,#8b8360 58%,#3a3626);
+  box-shadow:0 2px 4px #000b;
+  transition:transform .15s;
+}
+.settings-switch input:checked+.switch-track{background:#4c5f2c;border-color:var(--gold-bright)}
+.settings-switch input:checked+.switch-track i{transform:translateX(25px);background:radial-gradient(circle at 36% 30%,#fff3cd,#d3b166 58%,#6c5420)}
+.settings-switch input:focus-visible+.switch-track{outline:3px solid var(--gold-bright);outline-offset:3px}
+
+.settings-volume{display:flex;align-items:center;gap:10px;margin-top:14px;font-size:13px}
+.settings-volume input{flex:1;accent-color:var(--gold);min-height:28px;cursor:pointer}
+.settings-volume output{color:#e6cc85;font-variant-numeric:tabular-nums;min-width:44px}
+
+.settings-keys{margin:0;padding:0;list-style:none;display:grid;gap:7px}
+.settings-keys li{display:flex;justify-content:space-between;gap:12px;font-size:12px}
+.settings-keys b{
+  padding:2px 9px;
+  border:1px solid #5b6349;
+  border-radius:5px;
+  background:#141a12;
+  color:#e2d4a2;
+  font-weight:400;
+}
+.settings-keys span{color:#8fa089}
+
+@media(max-width:680px){
+  .arcade-settings{padding:24px 16px}
+  .settings-skins{grid-template-columns:repeat(2,1fr)}
+  .arcade-lever{height:112px}
+}
+@media(prefers-reduced-motion:reduce){
+  .lever-arm,.switch-track,.switch-track i,.arcade-settings button{transition:none}
+  .mechanical-counter b{animation:none}
+}

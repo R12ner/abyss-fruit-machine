@@ -122,3 +122,6 @@ body.arcade-menu-open>header,body.arcade-menu-open>main{display:none}
   .pusher-card-art .coin-2{width:70px;height:70px}
   .plinko-card-art .card-coin{width:78px;height:78px}
 }
+
+/* 大厅右上角的设置入口，和自助出售筹码按钮并排。 */
+.gateway-settings{letter-spacing:2px}

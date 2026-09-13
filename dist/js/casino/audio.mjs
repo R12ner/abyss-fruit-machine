@@ -1,14 +1,17 @@
 /** 机台音效：单一 AudioContext，所有声音由振荡器和噪声实时合成。 */
+import {settings} from './settings.mjs';
 
-const SOUND_KEY = 'abyss-mechanical-sound-v1';
 let audioContext;
 
-export const soundEnabled = () => {try {return localStorage.getItem(SOUND_KEY) === 'on';} catch {return false;}};
+export const soundEnabled = () => settings.get().sound;
 
 export function setSoundEnabled(enabled) {
-  try {localStorage.setItem(SOUND_KEY, enabled ? 'on' : 'off');} catch {}
-  return enabled;
+  settings.update({sound: !!enabled});
+  return !!enabled;
 }
+
+/** 设置里的音量作为总增益，乘在每个声音的电平上。 */
+const gainScale = () => settings.get().volume;
 
 /** 取得可用的 AudioContext；声音关闭或页面隐藏时返回 null，调用方直接跳过。 */
 function audioReady() {
@@ -29,7 +32,7 @@ export function playTone(frequency = 540, duration = .07, {type = 'sine', level 
     oscillator.frequency.setValueAtTime(frequency, now);
     oscillator.frequency.exponentialRampToValueAtTime(Math.max(24, frequency * sweep), now + duration);
     gain.gain.setValueAtTime(.0001, now);
-    gain.gain.exponentialRampToValueAtTime(level, now + .008);
+    gain.gain.exponentialRampToValueAtTime(Math.max(.0002, level * gainScale()), now + .008);
     gain.gain.exponentialRampToValueAtTime(.0001, now + duration);
     oscillator.connect(gain); gain.connect(ctx.destination);
     oscillator.start(now); oscillator.stop(now + duration + .02);
@@ -50,7 +53,7 @@ export function playClink(pitch = 1, level = .07) {
     const source = ctx.createBufferSource(); source.buffer = buffer;
     const filter = ctx.createBiquadFilter(); filter.type = 'bandpass';
     filter.frequency.setValueAtTime(2100 * pitch, now); filter.Q.value = 6;
-    const gain = ctx.createGain(); gain.gain.setValueAtTime(level, now);
+    const gain = ctx.createGain(); gain.gain.setValueAtTime(Math.max(.0002, level * gainScale()), now);
     gain.gain.exponentialRampToValueAtTime(.0001, now + .06);
     source.connect(filter); filter.connect(gain); gain.connect(ctx.destination);
     source.start(now); source.stop(now + .07);
