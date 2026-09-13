@@ -383,3 +383,113 @@
   .lever-arm,.switch-track,.switch-track i,.arcade-settings button{transition:none}
   .mechanical-counter b{animation:none}
 }
+
+/* ---------- 摇台摇杆（带回中弹簧） ---------- */
+
+.arcade-stick{
+  position:relative;
+  height:104px;
+  margin:2px 0 4px;
+}
+.arcade-stick .lever-plate{bottom:10px}
+.arcade-stick .lever-gate{bottom:23px}
+.arcade-stick .lever-pivot{bottom:21px}
+.arcade-stick .lever-arm{
+  bottom:28px;
+  /* 回中是弹簧弹回来的，所以要带一点过冲 */
+  transition:transform .2s cubic-bezier(.3,1.6,.5,1);
+}
+.arcade-stick.is-holding .lever-arm{transition:none}
+.arcade-stick.is-pushed .lever-knob{
+  background:
+    radial-gradient(circle at 34% 26%,#ffffffdd 0 8%,#ffffff44 20%,transparent 46%),
+    radial-gradient(circle at 50% 60%,#ef6a52 0 44%,#a32a22 76%,#601614 100%);
+  box-shadow:0 0 0 2px #2b1410,0 0 20px #e8704f66,0 4px 8px #000c,inset 0 -4px 8px #00000066;
+}
+.stick-hint{
+  position:absolute;
+  bottom:34px;
+  font-size:12px;
+  letter-spacing:1px;
+  color:#6f7d67;
+  pointer-events:none;
+}
+.stick-hint-left{left:6px}
+.stick-hint-right{right:6px}
+.arcade-stick.is-pushed .stick-hint{color:#e0c66e}
+/* 抓取面：盖住整块底座，指针按在哪都能推 */
+.mechanical-game .arcade-stick .stick-grab{
+  position:absolute;
+  inset:0;
+  min-height:0!important;
+  padding:0!important;
+  border:0!important;
+  border-radius:14px!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  cursor:grab;
+  touch-action:none;
+}
+.mechanical-game .arcade-stick.is-holding .stick-grab{cursor:grabbing}
+.mechanical-game .arcade-stick .stick-grab:hover:not(:disabled){filter:none}
+.mechanical-game .arcade-stick .stick-grab:active:not(:disabled){transform:none}
+.mechanical-game .arcade-stick .stick-grab:focus-visible{outline:3px solid var(--gold-bright);outline-offset:2px}
+.arcade-stick.is-disabled{opacity:.42}
+.arcade-stick.is-disabled .lever-knob{filter:grayscale(.7)}
+.mechanical-game .arcade-stick.is-disabled .stick-grab{cursor:not-allowed}
+
+/* ---------- 红色大投球 / 投币键 ---------- */
+
+.mechanical-game .mechanical-fire{
+  position:relative;
+  display:grid;
+  gap:2px;
+  width:100%;
+  min-height:96px;
+  margin-top:4px;
+  padding:14px 16px;
+  border:1px solid #d08a52;
+  border-radius:16px;
+  background:linear-gradient(#c8553f,#8a2d24 62%,#6d201c);
+  box-shadow:
+    inset 0 2px 0 #ffc09866,
+    inset 0 -3px 0 #00000055,
+    0 6px 0 #3d1412,
+    0 12px 22px #0007;
+  color:#fff3df;
+  text-shadow:0 1px 2px #00000066;
+  transition:transform .1s,box-shadow .1s,filter .15s;
+}
+.mechanical-game .mechanical-fire:hover:not(:disabled){filter:brightness(1.12)}
+.mechanical-game .mechanical-fire:active:not(:disabled){
+  transform:translateY(5px);
+  box-shadow:inset 0 2px 0 #ffc09844,inset 0 -2px 0 #00000055,0 1px 0 #3d1412,0 4px 10px #0008;
+}
+.mechanical-fire b{font:700 27px/1.1 var(--font-serif,Georgia,serif);letter-spacing:7px;text-indent:7px}
+.mechanical-fire em{font:700 16px var(--font-mono);font-style:normal;color:#ffe2bd}
+.mechanical-fire small{font-size:11px;letter-spacing:1px;color:#f0bfae}
+.mechanical-fire-count{
+  position:absolute;
+  top:-9px;right:-9px;
+  min-width:30px;height:30px;
+  display:grid;
+  place-items:center;
+  padding:0 7px;
+  border:2px solid #0d1a12;
+  border-radius:99px;
+  background:#e8cf87;
+  color:#2a2110;
+  font:700 15px/1 var(--font-mono);
+  font-style:normal;
+  box-shadow:0 3px 10px #0008;
+}
+.mechanical-hint{margin:6px 0 0;font-size:12px;line-height:1.6;color:#8d9a85}
+@media(prefers-reduced-motion:no-preference){
+  .mechanical-game .mechanical-fire:not(:disabled){animation:fire-breathe 2.6s ease-in-out infinite}
+  @keyframes fire-breathe{0%,100%{filter:brightness(1)}50%{filter:brightness(1.09)}}
+}
+@media(max-width:680px){
+  .mechanical-fire b{font-size:23px;letter-spacing:5px;text-indent:5px}
+  .arcade-stick{height:92px}
+}
+@media(prefers-reduced-motion:reduce){.arcade-stick .lever-arm{transition:none}}

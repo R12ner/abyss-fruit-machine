@@ -74,17 +74,47 @@ export function paytable(rows, risk) {
 
 /* ---------- 几何 ---------- */
 const BOARD_WIDTH = 528;
+/** 同屏最多允许几颗球：连按投球键时超过这个数就不再吃按键。 */
+export const MAX_BALLS = 6;
+
 export function plinkoGeometry(rows) {
   const spacing = BOARD_WIDTH / rows;
+  const gap = Math.min(36, 372 / rows);
   return {
-    rows, spacing, half: spacing / 2,
-    gap: Math.min(36, 372 / rows),
+    rows, spacing, half: spacing / 2, gap,
     pegTop: 108,
     slotTop: 492,
     slotCenter: index => 360 - rows * spacing / 2 + index * spacing,
     pegX: (row, col) => 360 - row * spacing / 2 + col * spacing,
-    pegY: row => 108 + row * Math.min(36, 372 / rows),
+    pegY: row => 108 + row * gap,
   };
+}
+
+/**
+ * 背板轮廓：必须由钉阵推导，不能写死。
+ * 层数越少，钉阵每层向外张开得越快（半宽 = 行号 × 间距/2，而行距是固定的），
+ * 写死的三角形只对 12 层成立，8 层时中间几行的钉子会穿到框外面去。
+ * 这里做成漏斗：顶点沿钉锥张开到最后一层，再外扩到奖励槽的宽度。
+ */
+export function boardOutline(rows) {
+  const geometry = plinkoGeometry(rows);
+  return {
+    apexY: geometry.pegTop - 40,
+    coneHalf: (rows - 1) * geometry.spacing / 2 + 28,
+    coneY: geometry.pegY(rows - 1) + 18,
+    slotHalf: (rows + 1) * geometry.spacing / 2 + 6,
+    slotTop: 486,
+    floorY: 534,
+  };
+}
+
+/** 轮廓在某个高度的半宽，绘制与测试共用同一套数字。 */
+export function outlineHalfAt(rows, y) {
+  const frame = boardOutline(rows);
+  if (y <= frame.apexY) return 0;
+  if (y <= frame.coneY) return (y - frame.apexY) / (frame.coneY - frame.apexY) * frame.coneHalf;
+  if (y >= frame.slotTop) return frame.slotHalf;
+  return frame.coneHalf + (y - frame.coneY) / (frame.slotTop - frame.coneY) * (frame.slotHalf - frame.coneHalf);
 }
 
 /* ---------- 回合 ---------- */

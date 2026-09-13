@@ -5,7 +5,8 @@ import {
 } from '../dist/js/games/coin-pusher/rules.mjs';
 import {
   ROW_OPTIONS, RISK_KEYS, STAKES, PAYTABLES, GOLD_PEGS, ENERGY_GOAL, NUDGE_MAX, CHARGED_MULTIPLIER,
-  paytable, slotProbabilities, pegCount, goldBonusTenths, plinkoGeometry, createPlinkoRound,
+  MAX_BALLS, paytable, slotProbabilities, pegCount, goldBonusTenths, plinkoGeometry,
+  boardOutline, outlineHalfAt, createPlinkoRound,
   restorePlinkoRound, nudgePlinkoRound, plinkoPosition, pathColumns, countGoldHits, baseReturn, longRunReturn,
 } from '../dist/js/games/plinko/rules.mjs';
 
@@ -139,6 +140,42 @@ for (const rows of ROW_OPTIONS) {
     const x = geometry.pegX(row, col);
     assert(x > 60 && x < 660, `${rows} 层第 ${row} 行钉超出画面`);
   }
+}
+
+// 背板外框必须完整包住每一层钉和全部奖励槽：层数越少钉阵张开越快，
+// 写死的三角形只对 12 层成立，8 层会穿模，所以这里逐行卡死。
+for (const rows of ROW_OPTIONS) {
+  const geometry = plinkoGeometry(rows), frame = boardOutline(rows);
+  const pegRadius = Math.max(2.6, Math.min(6, geometry.spacing / 8));
+  for (let row = 0; row < rows; row++) {
+    const need = Math.abs(geometry.pegX(row, row) - 360) + pegRadius;
+    const have = outlineHalfAt(rows, geometry.pegY(row));
+    assert(have > need, `${rows} 层第 ${row} 行钉穿出外框（需要 ${need.toFixed(1)}，外框只有 ${have.toFixed(1)}）`);
+  }
+  const slotEdge = Math.abs(geometry.slotCenter(rows) - 360) + geometry.spacing / 2;
+  assert(frame.slotHalf >= slotEdge, `${rows} 层奖励槽超出外框`);
+  assert(360 + frame.slotHalf < 716 && 360 - frame.slotHalf > 4, `${rows} 层外框超出 720 宽的画布`);
+  assert(frame.apexY < frame.coneY && frame.coneY < frame.slotTop && frame.slotTop < frame.floorY, '外框各段高度必须递增');
+  assert.equal(outlineHalfAt(rows, frame.apexY - 1), 0, '顶点以上没有外框');
+  assert.equal(outlineHalfAt(rows, frame.floorY), frame.slotHalf, '底部就是奖励槽的宽度');
+}
+
+// 多球：连按投出的每颗球都是独立回合，推动其中一颗不能影响另一颗。
+assert(MAX_BALLS >= 2, '必须允许多颗球同屏');
+{
+  const flock = Array.from({length: MAX_BALLS}, () => createPlinkoRound({bet: 10, risk: 'classic', rows: 12}));
+  for (const round of flock) {
+    assert(Number.isSafeInteger(round.payout));
+    assert.equal(round.directions.length, 12);
+    assert.deepEqual(round.nudged, []);
+  }
+  const left = createPlinkoRound({bet: 10, risk: 'classic', rows: 12}, () => .2);
+  const right = createPlinkoRound({bet: 10, risk: 'classic', rows: 12}, () => .8);
+  const rightSlot = right.slot;
+  assert.equal(nudgePlinkoRound(left, 0, 1), true);
+  assert.equal(left.slot, 1, '推球后这颗球的落点必须立即重算');
+  assert.equal(right.slot, rightSlot, '推动一颗球不能影响另一颗');
+  assert.deepEqual(right.nudged, []);
 }
 
 /* ================= 推币机 ================= */

@@ -3,7 +3,7 @@ import {money, readState, writeState, secureRandom} from '../../casino/storage.m
 import {playTone, playClink, playFanfare, playThud} from '../../casino/audio.mjs';
 import {createShaker, createFloaters} from '../../casino/effects.mjs';
 import {createPerspective, drawCoin, drawGlass} from '../../casino/canvas.mjs';
-import {createLever} from '../../casino/controls.mjs';
+import {createLever, createShakeStick} from '../../casino/controls.mjs';
 import {PUSHER, ZONES, TOWER, createPusherState, pusherFace, startPusherRound, stepPusher,
   tiltPusher, rechargeTilt, isPusherIdle, findTower} from './rules.mjs';
 
@@ -50,6 +50,17 @@ export function createCoinPusherGame({wallet, openLobby}) {
   let active = false, animation = 0, lastTime = 0, accumulator = 0, lastSave = 0, tiltTimer = 0;
   let history = Array.isArray(saved?.history) ? saved.history.filter(n => Number.isSafeInteger(n) && n >= 0).slice(0, 8) : [];
   const particles = [], shaker = createShaker(), floaters = createFloaters();
+  /**
+   * 一次摇台可能同时推落十几枚币，一枚一条 "+1" 会把画面糊满。
+   * 普通落币先攒进 burst，短暂间隔后合并成一条汇总；金币、金塔、代币和连锁仍单独弹字。
+   */
+  const burst = {amount: 0, sum: 0, count: 0, age: 0};
+  function flushBurst() {
+    if (!burst.count) return;
+    floaters.push(`+${money(burst.amount)}`, burst.sum / burst.count, 468,
+      {color: burst.count > 1 ? '#ffe07a' : '#dcecd6', size: burst.count > 1 ? 28 : 19, life: burst.count > 1 ? 1.3 : 1.05});
+    burst.amount = 0; burst.sum = 0; burst.count = 0; burst.age = 0;
+  }
   let towerBest = Number.isSafeInteger(saved?.towerBest) ? saved.towerBest : 0;
 
   const view = createCabinet({id: 'coin-pusher', title: '深渊推币机', english: 'THE COIN PUSHER', number: 'MACHINE 02', wallet, openLobby,
@@ -67,8 +78,8 @@ export function createCoinPusherGame({wallet, openLobby}) {
       <button type="button" class="mechanical-burst arcade-plate" id="pusher-burst">连续投 5 枚 · 5 USD</button>
       <div class="mechanical-gauge"><span class="mechanical-control-label" id="pusher-tilt-label">摇台能量 <output id="pusher-tilt-value">3 / 3</output></span>
         <div class="mechanical-gauge-bar" aria-hidden="true"><i data-tilt-fill></i></div>
-        <div class="mechanical-gauge-row" role="group" aria-labelledby="pusher-tilt-label">
-          <button type="button" class="arcade-plate" id="pusher-tilt-left">◀ 左摇</button><button type="button" class="arcade-plate" id="pusher-tilt-right">右摇 ▶</button></div></div>
+        <div id="pusher-stick-slot"></div>
+        <p class="mechanical-hint">按住摇杆往左右推到底触发摇台，松手自动回中；键盘 A / D 等效。</p></div>
       <div class="pusher-meters"><div><span>连锁 CHAIN</span><output data-chain>0</output></div>
         <div><span>侧槽回收</span><output data-recycle>0 / 10</output></div>
         <div><span>免费币</span><output data-free>0</output></div></div>
@@ -77,7 +88,7 @@ export function createCoinPusherGame({wallet, openLobby}) {
       <p><b>倍率区</b>：前沿分成五段，中央 ×2，其余 ×1。从哪一段掉下来就按那一段结算，所以瞄准中路更值钱、也更难推动。</p>
       <p><b>硬币种类</b>：普通币 1 USD，✦ 金币 4 USD，✦ 深渊代币本身不值钱，但推落时可以带走全部累积彩金。每投一枚币，彩金池 +2。</p>
       <p><b>连锁</b>：同一次投币里连续推落硬币会累积连锁数，每满 5 枚额外奖励 5 USD。</p>
-      <p><b>摇台</b>：能量满 3 格，约 11 秒回复 1 格。左右摇台会给整堆硬币一个横向冲量，可以把卡在边上的币救回中路——但也可能把它们直接甩进侧槽。</p>
+      <p><b>摇台摇杆</b>：按住摇杆往左右推到底就会摇台一次，松手自动回中（键盘 A / D 等效）。能量满 3 格，约 11 秒回复 1 格。摇台给整堆硬币一个横向冲量，可以把卡在边上的币救回中路——但也可能把它们直接甩进侧槽。</p>
       <p><b>侧槽回收</b>：掉进左右侧槽的币不计奖，但会累积回收进度，每满 10 枚返还 5 枚免费币。</p>
       <p>奖励留在出币槽，按“领取到钱包”收取。切换游戏会暂停推板，返回后继续；刷新会恢复已保存的币堆和进行中的投币。</p>`});
 
@@ -89,6 +100,9 @@ export function createCoinPusherGame({wallet, openLobby}) {
   });
   lever.format(aimLabel);
   $('#pusher-lever-slot').append(lever.element);
+  // 摇台是"点动"操作，所以用带回中弹簧的摇杆，而不是像导板那样停在扳过去的角度。
+  const stick = createShakeStick({label: '摇台摇杆', onShake: direction => tilt(direction)});
+  $('#pusher-stick-slot').append(stick.element);
   const persist = () => writeState(key, {...state, settle: 0, aim, history, towerBest});
 
   function render() {
@@ -111,7 +125,7 @@ export function createCoinPusherGame({wallet, openLobby}) {
     const charges = Math.floor(state.tilt);
     $('#pusher-tilt-value').textContent = `${charges} / ${PUSHER.tiltMax}`;
     $('[data-tilt-fill]').style.width = `${state.tilt / PUSHER.tiltMax * 100}%`;
-    $('#pusher-tilt-left').disabled = $('#pusher-tilt-right').disabled = charges < 1;
+    stick.disable(charges < 1);
   }
 
   /* ---------- 画面 ----------
@@ -479,7 +493,7 @@ export function createCoinPusherGame({wallet, openLobby}) {
         shaker.kick(8);
       }
       if (event.refund) {
-        floaters.push(`回收 +${event.refund} 免费币`, event.x < 360 ? 190 : 530, 420, {color: '#9fe6c0', size: 20});
+        floaters.push(`回收 +${event.refund} 免费币`, event.x < 360 ? 200 : 520, 436, {color: '#9fe6c0', size: 20});
         playFanfare(1); shaker.kick(4);
       }
       return;
@@ -494,19 +508,23 @@ export function createCoinPusherGame({wallet, openLobby}) {
           {color: '#ffe07a', size: 32, life: 1.7, rise: 88});
         playFanfare(4); shaker.kick(14);
         towerBest = Math.max(towerBest, event.tower);
+      } else if (event.kind === 'gold') {
+        floaters.push(`金币 +${event.amount}`, event.x, 416, {color: '#ffe07a', size: 24});
+        playTone(1150, .1, {level: .1});
+        shaker.kick(5);
       } else {
-        const big = event.kind === 'gold' || event.multiplier > 1;
-        floaters.push(`+${event.amount}`, event.x, 470, {color: big ? '#ffe07a' : '#dcecd6', size: big ? 26 : 19});
-        playTone(event.kind === 'gold' ? 1150 : 850 + event.multiplier * 90, .1, {level: .1});
-        shaker.kick(event.kind === 'gold' ? 5 : 1.6);
+        burst.amount += event.amount; burst.sum += event.x; burst.count++; burst.age = 0;
+        playTone(850 + event.multiplier * 90, .1, {level: .1});
+        shaker.kick(1.6);
       }
       if (event.chainBonus) {
-        floaters.push(`连锁 ×${event.chain} +${event.chainBonus}`, 360, 415, {color: '#ffc978', size: 24, life: 1.4});
+        floaters.push(`连锁 ×${event.chain} +${event.chainBonus}`, 360, 396, {color: '#ffc978', size: 24, life: 1.4});
         playFanfare(2); shaker.kick(7);
       }
       return;
     }
     if (event.type === 'complete') {
+      flushBurst();
       history.unshift(state.lastWin); history = history.slice(0, 8);
       view.submitRecords({bestWin: state.lastWin, bestChain: state.bestChain, bestTower: towerBest});
       view.status(state.lastWin
@@ -526,11 +544,12 @@ export function createCoinPusherGame({wallet, openLobby}) {
     }
     if (rechargeTilt(state, elapsed) && tiltTimer > .25) {tiltTimer = 0; renderTilt();}
     for (let i = particles.length - 1; i >= 0; i--) if ((particles[i].age += elapsed) > .65) particles.splice(i, 1);
+    if (burst.count && (burst.age += elapsed) > .16) flushBurst();
     floaters.step(elapsed);
     if (changed) {persist(); render();}
     else if (state.pending && now - lastSave > 700) {persist(); lastSave = now;}
     draw(elapsed);
-    animation = state.pending || particles.length || floaters.length || shaker.active || state.settle > 0
+    animation = state.pending || particles.length || floaters.length || burst.count || shaker.active || state.settle > 0
       ? requestAnimationFrame(tick) : 0;
   }
   function resume() {if (active && !document.hidden && !animation) {lastTime = 0; animation = requestAnimationFrame(tick);}}
@@ -545,17 +564,16 @@ export function createCoinPusherGame({wallet, openLobby}) {
     resume();
   }
   function tilt(direction) {
-    if (!active || !tiltPusher(state, direction)) return;
+    if (!active || !tiltPusher(state, direction)) return false;
     shaker.kick(11); playThud(96); playClink(.7, .1);
     floaters.push(direction < 0 ? '◀ 摇台' : '摇台 ▶', 360, 300, {color: '#ffd9a0', size: 26, life: .8, rise: 30});
     view.status('机台晃动 · 币堆正在重新落位');
     persist(); render(); resume();
+    return true;
   }
 
   $('#pusher-insert').onclick = () => insert(1);
   $('#pusher-burst').onclick = () => insert(5);
-  $('#pusher-tilt-left').onclick = () => tilt(-1);
-  $('#pusher-tilt-right').onclick = () => tilt(1);
   view.canvas.addEventListener('pointerdown', event => {
     if (state.pending) return;
     const rect = view.canvas.getBoundingClientRect();
@@ -583,6 +601,8 @@ export function createCoinPusherGame({wallet, openLobby}) {
     if (event.code === 'Space' || event.code === 'Enter') {event.preventDefault(); insert(1);}
     if (event.code === 'ArrowLeft') {event.preventDefault(); lever.hold(-1);}
     if (event.code === 'ArrowRight') {event.preventDefault(); lever.hold(1);}
+    if (event.code === 'KeyA') {event.preventDefault(); stick.pulse(-1);}
+    if (event.code === 'KeyD') {event.preventDefault(); stick.pulse(1);}
     if (event.code === 'KeyA') {event.preventDefault(); tilt(-1);}
     if (event.code === 'KeyD') {event.preventDefault(); tilt(1);}
     if (event.code === 'Escape') openLobby('games');

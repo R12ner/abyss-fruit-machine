@@ -4,8 +4,9 @@ import {playTone, playClink, playFanfare, playThud} from '../../casino/audio.mjs
 import {createShaker, createFloaters} from '../../casino/effects.mjs';
 import {drawFelt, drawGlass, strokeGoldBezel} from '../../casino/canvas.mjs';
 import {ROW_OPTIONS, RISKS, RISK_KEYS, STAKES, ENERGY_GOAL, ENERGY_PER_DROP, ENERGY_PER_GOLD,
-  CHARGED_MULTIPLIER, NUDGE_MAX, NUDGE_RECHARGE, GOLD_PEGS, goldBonusTenths, paytable, plinkoGeometry,
-  createPlinkoRound, restorePlinkoRound, nudgePlinkoRound, plinkoPosition, pathColumns} from './rules.mjs';
+  CHARGED_MULTIPLIER, NUDGE_MAX, NUDGE_RECHARGE, GOLD_PEGS, MAX_BALLS, goldBonusTenths, paytable,
+  plinkoGeometry, boardOutline, createPlinkoRound, restorePlinkoRound, nudgePlinkoRound,
+  plinkoPosition, pathColumns} from './rules.mjs';
 
 export const plinkoGameDefinition = Object.freeze({
   id: 'plinko', badge: 'MACHINE 03', title: '深渊弹珠机', subtitle: 'PLINKO · 金钉 · 蓄能 · 推球', cardClass: 'plinko-card',
@@ -48,23 +49,36 @@ const PLATE = Object.freeze({pivotY: 40, halfWidth: 104, swing: 2.1, apexY: 78})
 const plateOffset = seconds => Math.sin(seconds * PLATE.swing) * PLATE.halfWidth;
 
 export function createPlinkoGame({wallet, openLobby}) {
-  const key = 'abyss-plinko-state-v2', saved = readState(key);
+  const key = 'abyss-plinko-state-v3', saved = readState(key);
   let bet = STAKES.includes(saved?.bet) ? saved.bet : 10;
   let risk = Object.hasOwn(RISKS, saved?.risk) ? saved.risk : 'classic';
   let rows = ROW_OPTIONS.includes(saved?.rows) ? saved.rows : 12;
   let tray = Number.isSafeInteger(saved?.tray) && saved.tray >= 0 ? saved.tray : 0;
   let energy = Number.isSafeInteger(saved?.energy) && saved.energy >= 0 ? Math.min(ENERGY_GOAL, saved.energy) : 0;
   let nudge = Number.isFinite(saved?.nudge) ? clamp(saved.nudge, 0, NUDGE_MAX) : NUDGE_MAX;
-  let queue = Number.isSafeInteger(saved?.queue) ? clamp(saved.queue, 0, 4) : 0;
-  let pending = restorePlinkoRound(saved?.pending);
-  let progress = pending && Number.isFinite(saved?.progress) ? clamp(saved.progress, 0, .999) : 0;
   let history = Array.isArray(saved?.history) ? saved.history.map(restorePlinkoRound).filter(Boolean).slice(0, 8) : [];
-  let last = history[0] || null, active = false, animation = 0, lastTime = 0, lastPin = -1, lastSave = 0, nudgeTimer = 0;
-  let clock = 0, releaseX = 360;
-  if (pending) {bet = pending.bet; risk = pending.risk; rows = pending.rows;}
+  let last = history[0] || null, active = false, animation = 0, lastTime = 0, lastSave = 0, nudgeTimer = 0;
+  let clock = 0;
+
+  /**
+   * 同屏多球：投球不排队也不等待，按一次就多一颗，各自带自己的回合、进度、
+   * 轨迹和入场点（摆板当时晃到哪就从哪滑下去），因此连按出来的球彼此都不一样。
+   */
+  const balls = (Array.isArray(saved?.balls) ? saved.balls : []).slice(0, MAX_BALLS).map(raw => {
+    const round = restorePlinkoRound(raw);
+    if (!round) return null;
+    return {
+      round,
+      progress: Number.isFinite(raw.progress) ? clamp(raw.progress, 0, .999) : 0,
+      releaseX: Number.isFinite(raw.releaseX) ? clamp(raw.releaseX, 60, 660) : 360,
+      lastPin: -1, trail: [],
+    };
+  }).filter(Boolean);
+  if (balls.length) {bet = balls[0].round.bet; risk = balls[0].round.risk; rows = balls[0].round.rows;}
+  const busy = () => balls.length > 0;
 
   const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const trail = [], flashes = [], shaker = createShaker(), floaters = createFloaters();
+  const flashes = [], shaker = createShaker(), floaters = createFloaters();
   const durationFor = count => (reduced ? 1.3 : 2.6 + count * .11);
 
   const view = createCabinet({id: 'plinko', title: '深渊弹珠机', english: 'THE PLINKO CLUB', number: 'MACHINE 03', wallet, openLobby,
@@ -83,57 +97,79 @@ export function createPlinkoGame({wallet, openLobby}) {
       <div class="mechanical-rows" role="group" aria-labelledby="plinko-rows-label">${ROW_OPTIONS.map(value => `<button type="button" data-plinko-rows="${value}" aria-pressed="false">${value} 层</button>`).join('')}</div>
       <span class="mechanical-control-label" id="plinko-risk-label">倍率档位 <output id="plinko-risk-value">经典</output></span>
       <div class="mechanical-risk mechanical-risk-4" role="group" aria-labelledby="plinko-risk-label">${RISK_KEYS.map(name => `<button type="button" data-plinko-risk="${name}" aria-pressed="false">${RISKS[name].label}</button>`).join('')}</div>
-      <button type="button" class="mechanical-launch" id="plinko-drop">释放弹珠 · 10 USD<small>DROP THE BALL</small></button>
-      <button type="button" class="mechanical-burst arcade-plate" id="plinko-multi">连发 3 颗</button>
+      <button type="button" class="mechanical-fire" id="plinko-drop">
+        <b>投 球</b><em data-fire-cost>10 USD</em><small>连按可同时放多颗 · 空格 / 回车</small>
+        <i class="mechanical-fire-count" data-fire-count hidden>0</i></button>
       <div class="mechanical-gauge"><span class="mechanical-control-label" id="plinko-nudge-label">推球 <output id="plinko-nudge-value">2 / ${NUDGE_MAX}</output></span>
         <div class="mechanical-gauge-bar" aria-hidden="true"><i data-nudge-fill></i></div>
         <div class="mechanical-gauge-row" role="group" aria-labelledby="plinko-nudge-label">
           <button type="button" class="arcade-plate" id="plinko-nudge-left">◀ 左推</button><button type="button" class="arcade-plate" id="plinko-nudge-right">右推 ▶</button></div></div>
       <p>穿过钉阵按落点倍率得币。倍率包含本金，越靠两侧越难命中。</p></div>`,
-    help: `<p><b>基本玩法</b>：选择面额、层数和档位，按“释放弹珠”立即扣费。每层碰钉后左右机会相同，落入 层数+1 个奖励槽之一。奖励 = 面额 × 落点倍率，已包含本金。</p>
+    help: `<p><b>基本玩法</b>：选择面额、层数和档位，按红色大按钮（或空格 / 回车）立即扣费放一颗球。<b>不用等球落地</b>，可以继续连按，最多 ${MAX_BALLS} 颗球同时在盘面上跑，各自独立结算。每层碰钉后左右机会相同，落入 层数+1 个奖励槽之一。奖励 = 面额 × 落点倍率，已包含本金。</p>
       <p><b>层数</b>：8 层节奏最快、落点少；12 层是标准盘；16 层最长，两侧倍率也最高。层数变化时整张赔付表会重算。</p>
       <p><b>档位</b>：低风险 / 经典 / 高倍 / 深渊。越往上中央越薄、边缘越夸张，16 层深渊档边槽可达数百倍。</p>
       <p><b>金钉</b>：每颗球开局随机点亮 ${GOLD_PEGS} 枚金钉。球撞到一枚金钉，最终倍率额外 +${goldBonusTenths(12) / 10}（随层数缩放），同时能量 +${ENERGY_PER_GOLD}。</p>
       <p><b>深渊能量</b>：每投一球 +${ENERGY_PER_DROP}，命中金钉再 +${ENERGY_PER_GOLD}。攒满 ${ENERGY_GOAL} 点后，下一颗自动变成 ×${CHARGED_MULTIPLIER} 深渊之球，赔付整体翻倍。</p>
-      <p><b>顶部摆板</b>：机台顶上那块托盘一直自己左右晃，不受玩家控制。按下释放时球从托盘当时所在的位置滑进钉阵，所以每颗球的入场点都不一样。摆板只负责把球送进去，落点仍由钉阵逐层决定。</p>
-      <p><b>推球</b>：落球途中按左右方向键（或按钮）可以把下一层的碰钉结果拨向指定一侧，每颗球最多用 ${NUDGE_MAX} 次，能量约每 ${NUDGE_RECHARGE} 秒回复 1 次。落点和金钉命中会立刻重算。</p>
-      <p>落球期间不能改面额、层数或档位。切换游戏会暂停动画；刷新后会继续已扣费的同一颗弹珠，不会重新抽取结果。结果进入出币槽，按“领取到钱包”收取。</p>`});
+      <p><b>顶部摆板</b>：机台顶上那块托盘一直自己左右晃，不受玩家控制。按下投球时球从托盘当时所在的位置滑进钉阵，所以连按出来的每颗球入场点都不一样。摆板只负责把球送进去，落点仍由钉阵逐层决定。</p>
+      <p><b>推球</b>：落球途中按左右方向键（或按钮）可以把<b>最接近底部</b>那颗球下一层的碰钉结果拨向指定一侧，每颗球最多用 ${NUDGE_MAX} 次，能量约每 ${NUDGE_RECHARGE} 秒回复 1 次。落点和金钉命中会立刻重算；盘上多于一颗球时，会用光圈标出当前会被拨动的那颗。</p>
+      <p>盘上还有球时不能改面额、层数或档位。切换游戏会暂停动画；刷新后所有已扣费的球都会继续跑完，不会重新抽取结果。结果进入出币槽，按“领取到钱包”收取。</p>`});
 
   const {context: ctx, $} = view;
-  /** 背板轮廓：上方收口成漏斗，下方是放奖励槽的平底。 */
+  /**
+   * 背板轮廓：由 boardOutline(rows) 从钉阵推导，顶点沿钉锥张开到最后一层，
+   * 再外扩到奖励槽宽度，因此 8 / 12 / 16 层都不会出现钉子穿出边框。
+   */
   const boardPath = () => {
+    const frame = boardOutline(rows);
     ctx.beginPath();
-    ctx.moveTo(342, 69); ctx.quadraticCurveTo(360, 50, 378, 69); ctx.lineTo(657, 501);
-    ctx.quadraticCurveTo(671, 532, 639, 532); ctx.lineTo(81, 532);
-    ctx.quadraticCurveTo(49, 532, 63, 501); ctx.closePath();
+    ctx.moveTo(360 - 16, frame.apexY + 16);
+    ctx.quadraticCurveTo(360, frame.apexY - 6, 360 + 16, frame.apexY + 16);
+    ctx.lineTo(360 + frame.coneHalf, frame.coneY);
+    ctx.lineTo(360 + frame.slotHalf, frame.slotTop);
+    ctx.quadraticCurveTo(360 + frame.slotHalf + 10, frame.floorY, 360 + frame.slotHalf - 18, frame.floorY);
+    ctx.lineTo(360 - frame.slotHalf + 18, frame.floorY);
+    ctx.quadraticCurveTo(360 - frame.slotHalf - 10, frame.floorY, 360 - frame.slotHalf, frame.slotTop);
+    ctx.lineTo(360 - frame.coneHalf, frame.coneY);
+    ctx.closePath();
   };
   const odds = document.createElement('div'); odds.className = 'plinko-odds'; odds.setAttribute('aria-label', '从左到右的落点倍率');
   $('.mechanical-scene').after(odds);
-  const persist = () => writeState(key, {bet, risk, rows, tray, energy, nudge, queue, pending, progress, history});
+  const persist = () => writeState(key, {bet, risk, rows, tray, energy, nudge, history,
+    balls: balls.map(ball => ({...ball.round, progress: ball.progress, releaseX: ball.releaseX}))});
 
-  function currentRows() {return pending?.rows || rows;}
-  function currentRisk() {return pending?.risk || risk;}
+  /** 当前会被推球拨动的球：最接近底部、还有推球次数、且还没到最后一层的那颗。 */
+  function nudgeTarget() {
+    let best = null;
+    for (const ball of balls) {
+      if (ball.round.nudged.length >= NUDGE_MAX) continue;
+      if (plinkoPosition(ball.round, ball.progress).row + 1 >= ball.round.rows) continue;
+      if (!best || ball.progress > best.progress) best = ball;
+    }
+    return best;
+  }
 
   function render() {
-    const table = paytable(currentRows(), currentRisk());
-    view.update({tray, win: pending ? 0 : last?.payout || 0, busy: !!pending, minimum: bet});
+    const table = paytable(rows, risk), locked = busy();
+    view.update({tray, win: last?.payout || 0, busy: locked, minimum: bet});
     const charged = energy >= ENERGY_GOAL;
-    $('#plinko-drop').disabled = !!pending || wallet.balance() < bet;
-    $('#plinko-drop').innerHTML = `${pending ? '弹珠下落中' : `${charged ? '深渊之球 ×' + CHARGED_MULTIPLIER + ' · ' : '释放弹珠 · '}${bet} USD`}<small>DROP THE BALL</small>`;
-    $('#plinko-drop').classList.toggle('is-charged', charged && !pending);
-    $('#plinko-multi').disabled = !!pending || wallet.balance() < bet;
-    $('#plinko-multi').textContent = queue > 0 ? `连发中 · 还剩 ${queue} 颗` : '连发 3 颗';
+    $('#plinko-drop').disabled = wallet.balance() < bet || balls.length >= MAX_BALLS;
+    $('#plinko-drop').classList.toggle('is-charged', charged);
+    $('#plinko-drop').querySelector('b').textContent = charged ? '深渊之球' : '投 球';
+    $('[data-fire-cost]').textContent = `${bet} USD${charged ? ` · ×${CHARGED_MULTIPLIER}` : ''}`;
+    const counter = $('[data-fire-count]');
+    counter.hidden = !balls.length;
+    counter.textContent = String(balls.length);
     $('#plinko-cost').textContent = `${bet} USD`;
-    $('#plinko-rows-value').textContent = `${currentRows()} 层`;
-    $('#plinko-risk-value').textContent = RISKS[currentRisk()].label;
-    view.root.querySelectorAll('[data-plinko-bet]').forEach(button => {button.disabled = !!pending; button.setAttribute('aria-pressed', String(Number(button.dataset.plinkoBet) === bet));});
-    view.root.querySelectorAll('[data-plinko-rows]').forEach(button => {button.disabled = !!pending; button.setAttribute('aria-pressed', String(Number(button.dataset.plinkoRows) === rows));});
-    view.root.querySelectorAll('[data-plinko-risk]').forEach(button => {button.disabled = !!pending; button.setAttribute('aria-pressed', String(button.dataset.plinkoRisk === risk));});
+    $('#plinko-rows-value').textContent = `${rows} 层`;
+    $('#plinko-risk-value').textContent = RISKS[risk].label;
+    view.root.querySelectorAll('[data-plinko-bet]').forEach(button => {button.disabled = locked; button.setAttribute('aria-pressed', String(Number(button.dataset.plinkoBet) === bet));});
+    view.root.querySelectorAll('[data-plinko-rows]').forEach(button => {button.disabled = locked; button.setAttribute('aria-pressed', String(Number(button.dataset.plinkoRows) === rows));});
+    view.root.querySelectorAll('[data-plinko-risk]').forEach(button => {button.disabled = locked; button.setAttribute('aria-pressed', String(button.dataset.plinkoRisk === risk));});
     $('[data-energy]').textContent = `${Math.min(energy, ENERGY_GOAL)} / ${ENERGY_GOAL}`;
     $('[data-energy-fill]').style.width = `${Math.min(1, energy / ENERGY_GOAL) * 100}%`;
     $('.mechanical-energy').classList.toggle('is-full', charged);
     odds.style.setProperty('--slots', String(table.length));
-    odds.innerHTML = table.map((value, index) => `<span class="${!pending && last?.risk === currentRisk() && last?.rows === currentRows() && last.slot === index ? 'is-hit' : ''}" aria-label="第 ${index + 1} 槽，${value / 10} 倍">×${value / 10}</span>`).join('');
+    odds.innerHTML = table.map((value, index) => `<span class="${!locked && last?.risk === risk && last?.rows === rows && last.slot === index ? 'is-hit' : ''}" aria-label="第 ${index + 1} 槽，${value / 10} 倍">×${value / 10}</span>`).join('');
     $('[data-history]').innerHTML = history.length
       ? history.map(round => `<b class="${round.payout < round.bet ? 'lost' : ''}${round.charged ? ' charged' : ''}" title="${round.bet} USD × ${round.multiplier} = ${round.payout} USD（${round.rows} 层 ${RISKS[round.risk].label}${round.goldHits ? ` · 金钉 ${round.goldHits}` : ''}）">×${round.multiplier}</b>`).join('')
       : '还没有游戏记录';
@@ -141,15 +177,14 @@ export function createPlinkoGame({wallet, openLobby}) {
   }
   function renderNudge() {
     const charges = Math.floor(nudge);
-    const spare = pending ? NUDGE_MAX - pending.nudged.length : NUDGE_MAX;
     $('#plinko-nudge-value').textContent = `${charges} / ${NUDGE_MAX}`;
     $('[data-nudge-fill]').style.width = `${nudge / NUDGE_MAX * 100}%`;
-    const usable = charges >= 1 && !!pending && spare > 0;
+    const usable = charges >= 1 && !!nudgeTarget();
     $('#plinko-nudge-left').disabled = $('#plinko-nudge-right').disabled = !usable;
   }
 
   function draw(dt = 0) {
-    const count = currentRows(), geometry = plinkoGeometry(count), table = paytable(count, currentRisk());
+    const count = rows, geometry = plinkoGeometry(count), table = paytable(count, risk);
     drawFelt(ctx);
     shaker.begin(ctx, dt);
     boardPath();
@@ -167,14 +202,17 @@ export function createPlinkoGame({wallet, openLobby}) {
     ctx.strokeStyle = '#d1b26433'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(360, 86); ctx.lineTo(641, 512); ctx.lineTo(79, 512); ctx.closePath(); ctx.stroke();
 
-    const ball = pending ? plinkoPosition(pending, progress) : null;
-    const columns = pending ? pathColumns(pending.directions) : null;
-    const golden = new Set((pending?.gold || []).map(pair => `${pair[0]},${pair[1]}`));
+    // 多球：把所有球当前碰到的钉和全部金钉先汇总一次，钉阵只画一遍。
+    const points = balls.map(ball => plinkoPosition(ball.round, ball.progress));
+    const litPegs = new Set();
+    points.forEach(point => {if (point.row >= 0 && point.row < count) litPegs.add(`${point.row},${point.col}`);});
+    const golden = new Set();
+    for (const ball of balls) for (const pair of ball.round.gold) golden.add(`${pair[0]},${pair[1]}`);
     const radius = Math.max(2.6, Math.min(6, geometry.spacing / 8));
     for (let row = 0; row < count; row++) for (let col = 0; col <= row; col++) {
       const x = geometry.pegX(row, col), y = geometry.pegY(row);
       const gold = golden.has(`${row},${col}`);
-      const hit = pending && row === ball.row && columns[row] === col;
+      const hit = litPegs.has(`${row},${col}`);
       ctx.fillStyle = '#0008'; ctx.beginPath(); ctx.arc(x + 1, y + 3, radius + 1, 0, Math.PI * 2); ctx.fill();
       if (gold) {ctx.shadowColor = '#ffd15c'; ctx.shadowBlur = 12;}
       if (hit) {ctx.fillStyle = gold ? '#ffd97a44' : '#e2d78c33'; ctx.beginPath(); ctx.arc(x, y, radius * 3, 0, Math.PI * 2); ctx.fill();}
@@ -194,7 +232,7 @@ export function createPlinkoGame({wallet, openLobby}) {
     const slotWidth = Math.max(20, geometry.spacing - 4);
     table.forEach((value, index) => {
       const center = geometry.slotCenter(index), x = center - slotWidth / 2;
-      const hit = !pending && last?.risk === currentRisk() && last?.rows === count && last.slot === index;
+      const hit = !busy() && last?.risk === risk && last?.rows === count && last.slot === index;
       const edge = Math.abs(index - count / 2) / (count / 2);
       const tone = hit ? ['#ffeeb4', '#d8ae54'] : edge > .74 ? ['#c8713a', '#5c2f16']
         : edge > .42 ? ['#a88448', '#4a381c'] : ['#47714318', '#1c3520'].map((c, i) => i ? '#1c3520' : '#477143');
@@ -225,23 +263,26 @@ export function createPlinkoGame({wallet, openLobby}) {
     });
 
     drawPlate();
-    if (pending) {
-      trail.forEach((point, index) => {
-        ctx.globalAlpha = (index + 1) / trail.length * (pending.charged ? .34 : .2);
-        ctx.fillStyle = pending.charged ? '#9de8ff' : '#c8e7c6';
-        ctx.beginPath(); ctx.arc(point.x, point.y, 5, 0, Math.PI * 2); ctx.fill();
+    const focus = nudgeTarget();
+    balls.forEach((ball, index) => {
+      const point = points[index];
+      ball.trail.forEach((step, i) => {
+        ctx.globalAlpha = (i + 1) / ball.trail.length * (ball.round.charged ? .34 : .2);
+        ctx.fillStyle = ball.round.charged ? '#9de8ff' : '#c8e7c6';
+        ctx.beginPath(); ctx.arc(step.x, step.y, 5, 0, Math.PI * 2); ctx.fill();
       });
       ctx.globalAlpha = 1;
-      // 前 12% 的行程是"从摆板滑进钉阵"，之后交给规则层给出的路径。
-      const entry = Math.min(1, progress / .12);
-      const x = entry < 1 ? releaseX + (ball.x - releaseX) * entry : ball.x;
-      const y = entry < 1 ? PLATE.pivotY - 12 + (ball.y - (PLATE.pivotY - 12)) * entry : ball.y;
-      drawBall(x, y, pending.charged);
-      if (pending.goldHits) {
-        ctx.fillStyle = '#ffd678'; ctx.font = '15px Georgia'; ctx.textAlign = 'center';
-        ctx.fillText(`金钉 ×${pending.goldHits} · +${pending.bonusTenths / 10}`, 360, 62);
+      // 前 12% 的行程是「从摆板滑进钉阵」，之后交给规则层给出的路径。
+      const entry = Math.min(1, ball.progress / .12);
+      const x = entry < 1 ? ball.releaseX + (point.x - ball.releaseX) * entry : point.x;
+      const y = entry < 1 ? PLATE.pivotY - 12 + (point.y - (PLATE.pivotY - 12)) * entry : point.y;
+      if (ball === focus && balls.length > 1) {
+        ctx.strokeStyle = '#a8e6ff88'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(x, y, 15, 0, Math.PI * 2); ctx.stroke();
       }
-    } else {
+      drawBall(x, y, ball.round.charged);
+    });
+    if (!balls.length) {
       const resting = last && last.risk === risk && last.rows === rows;
       // 没有落球时，球停在摆板上跟着一起晃。
       if (resting) drawBall(geometry.slotCenter(last.slot), 480, false);
@@ -250,7 +291,7 @@ export function createPlinkoGame({wallet, openLobby}) {
     drawGlass(ctx);
     floaters.draw(ctx);
     ctx.fillStyle = '#d4c190'; ctx.font = '14px "Courier New", monospace'; ctx.textAlign = 'center';
-    ctx.fillText(`${RISKS[currentRisk()].label}档 · ${count} 层钉阵 · ${count + 1} 个落点${pending ? ` · 推球剩 ${NUDGE_MAX - pending.nudged.length}` : ''}`, 360, 574);
+    ctx.fillText(`${RISKS[risk].label}档 · ${count} 层钉阵 · ${count + 1} 个落点${balls.length ? ` · 盘上 ${balls.length} 颗` : ''}`, 360, 574);
     shaker.end(ctx);
   }
   /** 顶部摆板：一块带金属边的托盘，绕中心左右晃动，末端是球的出口。 */
@@ -286,12 +327,11 @@ export function createPlinkoGame({wallet, openLobby}) {
     ctx.fillStyle = ball; ctx.beginPath(); ctx.arc(x, y, charged ? 9 : 8, 0, Math.PI * 2); ctx.fill(); ctx.shadowBlur = 0;
   }
 
-  function settle() {
-    const round = pending;
+  function settle(ball) {
+    const round = ball.round;
     last = round; tray += round.payout;
     history.unshift(round); history = history.slice(0, 8);
-    energy = Math.min(ENERGY_GOAL, (round.charged ? 0 : energy) + ENERGY_PER_DROP + ENERGY_PER_GOLD * round.goldHits);
-    pending = null; progress = 0; trail.length = 0;
+    energy = Math.min(ENERGY_GOAL, energy + ENERGY_PER_DROP + ENERGY_PER_GOLD * round.goldHits);
     const geometry = plinkoGeometry(round.rows);
     const ratio = round.payout / round.bet;
     floaters.push(`×${round.multiplier}`, geometry.slotCenter(round.slot), 486,
@@ -304,8 +344,6 @@ export function createPlinkoGame({wallet, openLobby}) {
       `${round.goldHits ? `（金钉 ${round.goldHits} 枚 +${round.bonusTenths / 10}）` : ''} · 得币 ${money(round.payout)} USD` +
       `${energy >= ENERGY_GOAL ? ' · 能量已满，下一颗是深渊之球' : ''}`);
     view.submitRecords({bestPayout: round.payout, bestMultiplier: Math.round(round.multiplier * 10), bestGold: round.goldHits});
-    persist(); render(); draw();
-    if (queue > 0) {queue--; persist(); render(); setTimeout(() => {if (active) drop(true);}, reduced ? 200 : 620);}
   }
 
   function tick(now) {
@@ -316,73 +354,73 @@ export function createPlinkoGame({wallet, openLobby}) {
     if (nudge < NUDGE_MAX) {nudge = Math.min(NUDGE_MAX, nudge + elapsed / NUDGE_RECHARGE); if (nudgeTimer > .25) {nudgeTimer = 0; renderNudge();}}
     for (let i = flashes.length - 1; i >= 0; i--) if ((flashes[i].age += elapsed) > .42) flashes.splice(i, 1);
     floaters.step(elapsed);
-    if (pending) {
-      progress += elapsed / durationFor(pending.rows);
-      const point = plinkoPosition(pending, progress);
-      trail.push(point); if (trail.length > 9) trail.shift();
-      if (point.row !== lastPin && point.row >= 0 && point.row < pending.rows) {
-        lastPin = point.row;
-        const geometry = plinkoGeometry(pending.rows);
-        const gold = pending.gold.some(pair => pair[0] === point.row && pair[1] === point.col);
+    let landed = false;
+    for (let i = balls.length - 1; i >= 0; i--) {
+      const ball = balls[i];
+      ball.progress += elapsed / durationFor(ball.round.rows);
+      const point = plinkoPosition(ball.round, ball.progress);
+      ball.trail.push(point); if (ball.trail.length > 9) ball.trail.shift();
+      if (point.row !== ball.lastPin && point.row >= 0 && point.row < ball.round.rows) {
+        ball.lastPin = point.row;
+        const geometry = plinkoGeometry(ball.round.rows);
+        const gold = ball.round.gold.some(pair => pair[0] === point.row && pair[1] === point.col);
         flashes.push({x: geometry.pegX(point.row, point.col), y: geometry.pegY(point.row), age: 0, gold});
-        playClink(.85 + point.row / pending.rows * .9, gold ? .11 : .06);
+        playClink(.85 + point.row / ball.round.rows * .9, gold ? .11 : .05);
         if (gold) {
           playTone(1250, .16, {type: 'triangle', level: .1, sweep: 1.4});
-          floaters.push(`金钉 +${goldBonusTenths(pending.rows) / 10}`, geometry.pegX(point.row, point.col), geometry.pegY(point.row) - 12,
-            {color: '#ffd979', size: 18, life: .85, rise: 40});
+          floaters.push(`金钉 +${goldBonusTenths(ball.round.rows) / 10}`, geometry.pegX(point.row, point.col), geometry.pegY(point.row) + 26,
+            {color: '#ffd979', size: 16, life: .8, rise: 26});
           shaker.kick(4);
         }
       }
-      if (progress >= 1) {settle(); animation = flashes.length || floaters.length || shaker.active ? requestAnimationFrame(tick) : 0; return;}
-      if (now - lastSave > 700) {persist(); lastSave = now;}
+      if (ball.progress >= 1) {settle(ball); balls.splice(i, 1); landed = true;}
     }
+    if (landed) {persist(); render();}
+    else if (balls.length && now - lastSave > 700) {persist(); lastSave = now;}
     draw(elapsed);
     // 摆板一直在晃，所以空闲时也要继续出帧。
     animation = active && !document.hidden ? requestAnimationFrame(tick) : 0;
   }
   function resume() {if (active && !document.hidden && !animation) {lastTime = 0; animation = requestAnimationFrame(tick);}}
 
-  function drop(fromQueue = false) {
-    if (!active || pending) return;
+  function drop() {
+    if (!active || balls.length >= MAX_BALLS) return;
     const charged = energy >= ENERGY_GOAL;
     let round;
     try {round = createPlinkoRound({bet, risk, rows, charged}, secureRandom);}
     catch {view.status('弹珠暂时无法释放，请重试'); return;}
-    if (wallet.spend(bet) !== bet) {
-      queue = 0;
-      view.status('钱包余额不足，或其他机台正在结算'); render(); return;
-    }
-    releaseX = 360 + plateOffset(clock);
-    pending = round; progress = 0; lastPin = -1; trail.length = 0; flashes.length = 0;
+    if (wallet.spend(bet) !== bet) {view.status('钱包余额不足，或其他机台正在结算'); render(); return;}
+    if (charged) energy = 0;
+    // 摆板当时晃到哪，这颗球就从哪滑进去——连按出来的球入场点各不相同。
+    balls.push({round, progress: 0, releaseX: 360 + plateOffset(clock), lastPin: -1, trail: []});
     persist(); render();
-    view.status(`${charged ? '深渊之球释放 · 赔付 ×' + CHARGED_MULTIPLIER : '弹珠穿过钉阵'} · 金钉 ${round.gold.length} 枚${fromQueue ? ` · 连发剩 ${queue} 颗` : ''}`);
+    view.status(`${charged ? '深渊之球释放 · 赔付 ×' + CHARGED_MULTIPLIER : '弹珠穿过钉阵'} · 盘上 ${balls.length} 颗`);
     playTone(charged ? 620 : 410, .12, {type: charged ? 'square' : 'sine', level: .09});
     if (charged) shaker.kick(6);
     resume();
   }
   function pushBall(direction) {
-    if (!active || !pending || nudge < 1) return;
-    const point = plinkoPosition(pending, progress);
-    const target = point.row < 0 ? 0 : point.row + 1;
-    if (target >= pending.rows) {view.status('已经到底层，来不及推了'); return;}
-    if (!nudgePlinkoRound(pending, target, direction)) {view.status(`这颗球的推球次数已用完（每颗 ${NUDGE_MAX} 次）`); renderNudge(); return;}
+    if (!active || nudge < 1) return;
+    const ball = nudgeTarget();
+    if (!ball) {view.status('现在没有可以推的球'); return;}
+    const target = Math.max(0, plinkoPosition(ball.round, ball.progress).row + 1);
+    if (!nudgePlinkoRound(ball.round, target, direction)) {view.status(`这颗球的推球次数已用完（每颗 ${NUDGE_MAX} 次）`); renderNudge(); return;}
     nudge -= 1;
-    const geometry = plinkoGeometry(pending.rows);
-    floaters.push(direction ? '推 ▶' : '◀ 推', geometry.pegX(target, pathColumns(pending.directions)[target]), geometry.pegY(target) - 18,
-      {color: '#a8e6ff', size: 20, life: .8, rise: 34});
+    const geometry = plinkoGeometry(ball.round.rows);
+    floaters.push(direction ? '推 ▶' : '◀ 推', geometry.pegX(target, pathColumns(ball.round.directions)[target]), geometry.pegY(target) + 26,
+      {color: '#a8e6ff', size: 18, life: .8, rise: 26});
     shaker.kick(5); playTone(direction ? 720 : 540, .1, {type: 'square', level: .08});
     persist(); render(); resume();
   }
 
-  $('#plinko-drop').onclick = () => {queue = 0; drop();};
-  $('#plinko-multi').onclick = () => {if (pending) return; queue = 2; persist(); render(); drop(true);};
+  $('#plinko-drop').onclick = drop;
   $('#plinko-nudge-left').onclick = () => pushBall(0);
   $('#plinko-nudge-right').onclick = () => pushBall(1);
-  view.root.querySelectorAll('[data-plinko-bet]').forEach(button => {button.onclick = () => {if (pending) return; bet = Number(button.dataset.plinkoBet); persist(); render();};});
-  view.root.querySelectorAll('[data-plinko-rows]').forEach(button => {button.onclick = () => {if (pending) return; rows = Number(button.dataset.plinkoRows); persist(); render(); draw();};});
-  view.root.querySelectorAll('[data-plinko-risk]').forEach(button => {button.onclick = () => {if (pending) return; risk = button.dataset.plinkoRisk; persist(); render(); draw();};});
+  view.root.querySelectorAll('[data-plinko-bet]').forEach(button => {button.onclick = () => {if (busy()) return; bet = Number(button.dataset.plinkoBet); persist(); render();};});
+  view.root.querySelectorAll('[data-plinko-rows]').forEach(button => {button.onclick = () => {if (busy()) return; rows = Number(button.dataset.plinkoRows); persist(); render(); draw();};});
+  view.root.querySelectorAll('[data-plinko-risk]').forEach(button => {button.onclick = () => {if (busy()) return; risk = button.dataset.plinkoRisk; persist(); render(); draw();};});
   $('.mechanical-collect').onclick = () => {
-    const amount = tray; if (!amount || pending) return;
+    const amount = tray; if (!amount) return;
     if (wallet.deposit(amount) !== amount) {view.status('其他机台正在结算，请稍后领取'); return;}
     tray = 0; persist(); render(); playFanfare(2); view.status(`已领取 ${money(amount)} USD 到钱包`);
   };
@@ -395,14 +433,15 @@ export function createPlinkoGame({wallet, openLobby}) {
     nudge = Math.min(NUDGE_MAX, nudge + .5 / NUDGE_RECHARGE); renderNudge();
   }, 500);
   document.addEventListener('keydown', event => {
-    if (!active || document.querySelector('dialog[open]') || event.target !== document.body || event.repeat) return;
-    if (event.code === 'Space' || event.code === 'Enter') {event.preventDefault(); queue = 0; drop();}
+    if (!active || document.querySelector('dialog[open]') || event.target !== document.body) return;
+    if (event.code === 'Space' || event.code === 'Enter') {event.preventDefault(); drop();}
+    if (event.repeat) return;
     if (event.code === 'ArrowLeft') {event.preventDefault(); pushBall(0);}
     if (event.code === 'ArrowRight') {event.preventDefault(); pushBall(1);}
     if (event.code === 'Escape') openLobby('games');
   });
   return {
-    enter() {active = true; view.enter(); render(); draw(); resume(); if (pending) view.status('继续上次弹珠 · 无需再次扣费');},
-    leave() {active = false; queue = 0; persist(); cancelAnimationFrame(animation); animation = 0; view.leave();},
+    enter() {active = true; view.enter(); render(); draw(); resume(); if (balls.length) view.status(`继续上次的 ${balls.length} 颗弹珠 · 无需再次扣费`);},
+    leave() {active = false; persist(); cancelAnimationFrame(animation); animation = 0; view.leave();},
   };
 }

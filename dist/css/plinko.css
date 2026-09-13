@@ -43,13 +43,14 @@
 .mechanical-energy.is-full output{color:#d8faff}
 
 /* 蓄满时的主按钮：同一颗实体键换成深渊蓝 */
-.mechanical-game .mechanical-launch.is-charged{
+.mechanical-game .mechanical-fire.is-charged{
   border-color:#123f4d;
   background:radial-gradient(ellipse at 38% 26%,#7fdcf4 0,#2288a4 42%,#0f5a72 74%,#07333f 100%);
   box-shadow:0 0 0 3px #5d94a4,inset 0 2px 3px #ffffff66,inset 0 -6px 12px #00000066,0 6px 0 #07242e,0 0 30px #4fd4ee55;
   color:#eaffff;
 }
-.mechanical-game .mechanical-launch.is-charged small{color:#a9e6f4}
+.mechanical-game .mechanical-fire.is-charged small{color:#a9e6f4}
+.mechanical-game .mechanical-fire.is-charged em{color:#ddf9ff}
 .mechanical-history b.charged{border-color:#6fd0e6;color:#a9ecff;box-shadow:0 0 10px #4fd4ee44}
 
 /* 层数与档位 */
