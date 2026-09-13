@@ -28,14 +28,9 @@ const VIEW = Object.freeze({
   trayTop: 528, trayHeight: 48,
   plateDepth: 13,    // 推板正面的厚度
   wallFlare: 1.24,   // 机箱开口比台面宽出的比例，决定内墙的可见宽度
-  // 投币摆臂：支点在画面上方之外，末端扫过 dropLeft~dropLeft+dropSpan 这一段。
-  armPivotY: 44, armLength: 196,
+  // 投币头：沿顶部导轨左右滑动，硬币从它正下方掉进台面。
+  railY: 66, headBottom: 116,
 });
-
-/** 摆臂末端要落在目标 x 时的倾角。 */
-function armAngle(targetX) {
-  return Math.asin(Math.max(-1, Math.min(1, (targetX - 360) / VIEW.armLength)));
-}
 
 const perspective = createPerspective({centerX: 360, farY: VIEW.farY, nearY: VIEW.nearY, farScale: .72});
 const scaleAt = y => perspective.scale(y);
@@ -72,7 +67,7 @@ export function createCoinPusherGame({wallet, openLobby}) {
     controls: `<div class="mechanical-jackpot"><span>累积彩金 <small>JACKPOT</small></span><output data-jackpot>0</output>
         <p>推落一枚 ✦ 深渊代币 即可全额带走</p></div>
       <div class="mechanical-controls">
-      <span class="mechanical-control-label">导板角度 <output id="pusher-aim-value">正中</output></span>
+      <span class="mechanical-control-label">投币头位置 <output id="pusher-aim-value">正中</output></span>
       <div id="pusher-lever-slot"></div>
       <button type="button" class="mechanical-launch" id="pusher-insert">投一枚 · 1 USD<small>INSERT COIN</small></button>
       <button type="button" class="mechanical-burst arcade-plate" id="pusher-burst">连续投 5 枚 · 5 USD</button>
@@ -83,8 +78,8 @@ export function createCoinPusherGame({wallet, openLobby}) {
       <div class="pusher-meters"><div><span>连锁 CHAIN</span><output data-chain>0</output></div>
         <div><span>侧槽回收</span><output data-recycle>0 / 10</output></div>
         <div><span>免费币</span><output data-free>0</output></div></div>
-      <p>按住摇柄两侧扳动机内导板，硬币从导板末端滑出。中央倍率区 ×2，前沿立着金塔。</p></div>`,
-    help: `<p><b>投币</b>：每枚 1 虚拟 USD。拖动滑杆或点击台面选择位置，再按投币按钮；连续投币按当前位置投入 5 枚。有免费币时优先使用免费币，不扣钱包。</p>
+      <p>抓住摇杆左右推，机内的投币头就滑到对应位置。中央倍率区 ×2，前沿立着金塔。</p></div>`,
+    help: `<p><b>投币</b>：每枚 1 虚拟 USD。按投币按钮从投币头当前位置放一枚；连发按钮一次投 5 枚。有免费币时优先使用免费币，不扣钱包。</p>
       <p><b>倍率区</b>：前沿分成五段，中央 ×2，其余 ×1。从哪一段掉下来就按那一段结算，所以瞄准中路更值钱、也更难推动。</p>
       <p><b>硬币种类</b>：普通币 1 USD，✦ 金币 4 USD，✦ 深渊代币本身不值钱，但推落时可以带走全部累积彩金。每投一枚币，彩金池 +2。</p>
       <p><b>连锁</b>：同一次投币里连续推落硬币会累积连锁数，每满 5 枚额外奖励 5 USD。</p>
@@ -95,7 +90,7 @@ export function createCoinPusherGame({wallet, openLobby}) {
   const {context: ctx, $} = view;
   const aimLabel = value => (Math.abs(value - .5) < .04 ? '正中' : `${value < .5 ? '左' : '右'} ${Math.round(Math.abs(value - .5) * 200)}%`);
   const lever = createLever({
-    label: '投币导板角度', value: aim, speed: .7,
+    label: '投币头位置', value: aim,
     onChange: next => {aim = next; $('#pusher-aim-value').textContent = aimLabel(next); draw(); persist();},
   });
   lever.format(aimLabel);
@@ -361,47 +356,73 @@ export function createCoinPusherGame({wallet, openLobby}) {
    */
   function drawDeflector() {
     const targetX = PUSHER.dropLeft + aim * PUSHER.dropSpan;
-    const angle = armAngle(targetX);
-    const tipX = 360 + VIEW.armLength * Math.sin(angle);
-    const tipY = VIEW.armPivotY + VIEW.armLength * Math.cos(angle);
+    const {railY} = VIEW;
     ctx.save();
-    // 顶部机壳，摆臂从里面伸出来
-    const housing = ctx.createLinearGradient(0, 0, 0, 52);
+    // 顶部机壳
+    const housing = ctx.createLinearGradient(0, 0, 0, 46);
     housing.addColorStop(0, '#131a12'); housing.addColorStop(1, '#05090600');
-    ctx.fillStyle = housing; ctx.fillRect(0, 0, 720, 52);
-    // 摆臂扫过的弧线刻度
-    ctx.strokeStyle = '#d7bd7a2e'; ctx.lineWidth = 1; ctx.setLineDash([4, 8]);
-    ctx.beginPath();
-    ctx.arc(360, VIEW.armPivotY, VIEW.armLength,
-      armAngle(PUSHER.dropLeft) - Math.PI / 2, armAngle(PUSHER.dropLeft + PUSHER.dropSpan) - Math.PI / 2);
-    ctx.stroke(); ctx.setLineDash([]);
-    // 摆臂本体
-    ctx.translate(360, VIEW.armPivotY);
-    ctx.rotate(angle);
-    const arm = ctx.createLinearGradient(-18, 0, 18, 0);
-    arm.addColorStop(0, '#2b3122'); arm.addColorStop(.4, '#8d8459'); arm.addColorStop(.58, '#e6d8a4'); arm.addColorStop(1, '#343023');
-    ctx.fillStyle = arm;
-    ctx.beginPath(); ctx.roundRect(-17, 14, 34, VIEW.armLength - 22, 9); ctx.fill();
+    ctx.fillStyle = housing; ctx.fillRect(0, 0, 720, 46);
+
+    // 导轨：投币头就在这条轨道上左右走，行程一眼看得出
+    const railLeft = PUSHER.dropLeft - 18, railRight = PUSHER.dropLeft + PUSHER.dropSpan + 18;
+    const rail = ctx.createLinearGradient(0, railY - 6, 0, railY + 6);
+    rail.addColorStop(0, '#4b5340'); rail.addColorStop(.45, '#d5cda0'); rail.addColorStop(1, '#2a2f21');
+    ctx.fillStyle = rail;
+    ctx.beginPath(); ctx.roundRect(railLeft, railY - 5, railRight - railLeft, 10, 5); ctx.fill();
     ctx.strokeStyle = '#00000077'; ctx.lineWidth = 1; ctx.stroke();
-    // 末端出币斗
-    ctx.fillStyle = '#0a0f09';
-    ctx.beginPath(); ctx.roundRect(-22, VIEW.armLength - 26, 44, 32, 8); ctx.fill();
-    ctx.strokeStyle = '#e3c478'; ctx.lineWidth = 2.5; ctx.stroke();
-    ctx.fillStyle = '#e3c47844';
-    ctx.beginPath(); ctx.ellipse(0, VIEW.armLength - 9, 14, 5.5, 0, 0, Math.PI * 2); ctx.fill();
+    // 轨道两端的限位块
+    ctx.fillStyle = '#6d6244';
+    for (const x of [railLeft, railRight]) {
+      ctx.beginPath(); ctx.roundRect(x - 5, railY - 12, 10, 24, 3); ctx.fill();
+    }
+    // 刻度
+    ctx.strokeStyle = '#d7bd7a33'; ctx.lineWidth = 1;
+    for (let i = 0; i <= 8; i++) {
+      const x = PUSHER.dropLeft + PUSHER.dropSpan * (i / 8);
+      ctx.beginPath(); ctx.moveTo(x, railY + 8); ctx.lineTo(x, railY + (i % 4 ? 13 : 17)); ctx.stroke();
+    }
+
+    // 投币头：一个挂在轨道上的料斗，下面接一段竖直溜槽
+    ctx.fillStyle = '#0d130c';
+    ctx.beginPath(); ctx.roundRect(targetX - 30, railY - 16, 60, 34, 7); ctx.fill();
+    const shell = ctx.createLinearGradient(targetX - 30, 0, targetX + 30, 0);
+    shell.addColorStop(0, '#343b28'); shell.addColorStop(.42, '#9c9367'); shell.addColorStop(.58, '#e6d8a4'); shell.addColorStop(1, '#3a3526');
+    ctx.fillStyle = shell;
+    ctx.beginPath(); ctx.roundRect(targetX - 27, railY - 13, 54, 22, 5); ctx.fill();
+    ctx.strokeStyle = '#e3c478'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(targetX - 30, railY - 16, 60, 34, 7); ctx.stroke();
+    // 溜槽：从料斗口一直收到落币宽度，末端是明确的出币口
+    ctx.fillStyle = '#080d07';
+    ctx.beginPath();
+    ctx.moveTo(targetX - 23, railY + 18);
+    ctx.lineTo(targetX + 23, railY + 18);
+    ctx.lineTo(targetX + 15, VIEW.headBottom);
+    ctx.lineTo(targetX - 15, VIEW.headBottom);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#c8a95d'; ctx.lineWidth = 2; ctx.stroke();
+    // 出币口
+    ctx.fillStyle = '#e3c47866';
+    ctx.beginPath(); ctx.ellipse(targetX, VIEW.headBottom, 15, 5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#ffe3a1'; ctx.lineWidth = 1.5; ctx.stroke();
     ctx.restore();
-    // 支点：看得见的黄铜轴，摆臂绕它转
-    ctx.fillStyle = '#1b2018';
-    ctx.beginPath(); ctx.arc(360, VIEW.armPivotY, 26, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = '#b79a56'; ctx.lineWidth = 3; ctx.stroke();
-    ctx.fillStyle = '#d9c98f';
-    ctx.beginPath(); ctx.arc(360, VIEW.armPivotY, 9, 0, Math.PI * 2); ctx.fill();
-    // 出币斗到台面的落点提示
-    ctx.strokeStyle = '#ffe3a166'; ctx.lineWidth = 1; ctx.setLineDash([4, 7]);
-    ctx.beginPath(); ctx.moveTo(tipX, tipY + 10); ctx.lineTo(px(targetX, VIEW.nearY), VIEW.nearY); ctx.stroke();
+
+    // 落币柱：从出币口直直往下，清楚表明币会掉在哪一列
+    const bottom = px(targetX, VIEW.nearY);
+    const beam = ctx.createLinearGradient(0, VIEW.headBottom, 0, VIEW.nearY);
+    beam.addColorStop(0, '#ffe3a130'); beam.addColorStop(1, '#ffe3a108');
+    ctx.fillStyle = beam;
+    ctx.beginPath();
+    ctx.moveTo(targetX - 13, VIEW.headBottom);
+    ctx.lineTo(targetX + 13, VIEW.headBottom);
+    ctx.lineTo(bottom + 15, VIEW.nearY);
+    ctx.lineTo(bottom - 15, VIEW.nearY);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = '#ffe3a155'; ctx.lineWidth = 1; ctx.setLineDash([5, 6]);
+    ctx.beginPath(); ctx.moveTo(targetX, VIEW.headBottom + 4); ctx.lineTo(bottom, VIEW.nearY); ctx.stroke();
     ctx.setLineDash([]);
+
     ctx.fillStyle = '#9d8a5c'; ctx.font = '12px "Courier New", monospace'; ctx.textAlign = 'left';
-    ctx.fillText('投 币 导 板', 22, 28);
+    ctx.fillText('投 币 头', 22, 28);
     ctx.textAlign = 'center';
   }
 
@@ -599,16 +620,13 @@ export function createCoinPusherGame({wallet, openLobby}) {
   document.addEventListener('keydown', event => {
     if (!active || document.querySelector('dialog[open]') || event.target !== document.body || event.repeat) return;
     if (event.code === 'Space' || event.code === 'Enter') {event.preventDefault(); insert(1);}
-    if (event.code === 'ArrowLeft') {event.preventDefault(); lever.hold(-1);}
-    if (event.code === 'ArrowRight') {event.preventDefault(); lever.hold(1);}
+    if (event.code === 'ArrowLeft') {event.preventDefault(); lever.nudge(-1);}
+    if (event.code === 'ArrowRight') {event.preventDefault(); lever.nudge(1);}
     if (event.code === 'KeyA') {event.preventDefault(); stick.pulse(-1);}
     if (event.code === 'KeyD') {event.preventDefault(); stick.pulse(1);}
     if (event.code === 'KeyA') {event.preventDefault(); tilt(-1);}
     if (event.code === 'KeyD') {event.preventDefault(); tilt(1);}
     if (event.code === 'Escape') openLobby('games');
-  });
-  document.addEventListener('keyup', event => {
-    if (event.code === 'ArrowLeft' || event.code === 'ArrowRight') lever.release();
   });
   return {
     enter() {active = true; view.enter(); render(); draw(); if (!isPusherIdle(state)) {view.status('继续上次投币 · 推板运行中'); resume();}},

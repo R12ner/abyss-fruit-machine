@@ -545,3 +545,45 @@ body.mode-mechanical>header,body.mode-mechanical>main{display:none}
   .mechanical-lamps i{animation:none;background:#c9ab5e}
   .mechanical-gauge-bar i{transition:none}
 }
+
+/* ---- 控制台面板收尾 ----
+ * 每块面板统一成"刻字标题 + 分隔线 + 内容"，边缘给一道内高光，
+ * 看起来像一块块拧在机柜上的金属面板，而不是并排的方框。
+ */
+.mechanical-console>*{position:relative}
+.mechanical-console>*:after{
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:inherit;
+  pointer-events:none;
+  box-shadow:inset 0 1px 0 #ffffff12,inset 0 -1px 0 #00000066;
+}
+.mechanical-controls{gap:12px}
+/* 面板小标题：刻字感的字距与一条渐隐分隔线 */
+.mechanical-control-label,
+.mechanical-console>.mechanical-meter>span,
+.mechanical-console>.mechanical-tray>div:first-child,
+.mechanical-records>span,
+.mechanical-history>span{
+  letter-spacing:2px;
+  text-shadow:0 1px 0 #00000099;
+}
+.mechanical-control-label{
+  padding-bottom:7px;
+  border-bottom:1px solid;
+  border-image:linear-gradient(90deg,#6f7a5e88,#6f7a5e11) 1;
+}
+.mechanical-hint{
+  margin:0;
+  color:#8d9a85;
+  font-size:12px;
+  line-height:1.6;
+}
+/* 三联小计量：加一层内凹和顶部高光 */
+.pusher-meters>div{box-shadow:inset 0 2px 6px #000a,inset 0 -1px 0 #ffffff0f}
+/* 出币槽的金属压边 */
+.mechanical-console>.mechanical-tray{border-color:#7c6839}
+.mechanical-console>.mechanical-meter{border-color:#8a7444}
+/* 摇杆所在的小节与其它控件拉开一点距离 */
+#pusher-lever-slot,#pusher-stick-slot,#plinko-nudge-slot{margin-top:-2px}

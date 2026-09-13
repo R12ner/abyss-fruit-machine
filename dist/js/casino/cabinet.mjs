@@ -58,7 +58,7 @@ export function createCabinet({id, title, english, number, controls, help, walle
         </div>
         ${recordFields.length ? `<div class="mechanical-records"><span>机台纪录 <small>BEST</small></span>
           <dl>${recordFields.map(field => `<div><dt>${field.label}</dt><dd data-record="${field.key}">—</dd></div>`).join('')}</dl></div>` : ''}
-        <div class="mechanical-history"><span>机台记录</span><div data-history>还没有游戏记录</div></div>
+        <div class="mechanical-history"><span>最近几局 <small>RECENT</small></span><div data-history>还没有游戏记录</div></div>
         <p class="mechanical-wallet-hint" hidden>钱包余额不足。可领取出币槽奖励，或返回大厅兑换已有筹码。</p>
       </aside>
     </div>

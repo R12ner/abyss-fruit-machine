@@ -86,14 +86,9 @@
 
 .arcade-lever{
   position:relative;
-  height:132px;
-  margin:2px 0 6px;
-  display:grid;
-  /* 中间这一列是摇杆和底座的地盘，两侧才是扳动键 */
-  grid-template-columns:1fr 150px 1fr;
-  align-items:end;
-  gap:8px;
-  padding-bottom:30px;
+  height:124px;
+  margin:4px 0 8px;
+  padding-bottom:28px;
 }
 /* 底座金属板 */
 .lever-plate{
@@ -162,34 +157,9 @@
   box-shadow:0 0 0 2px #2b1410,0 4px 8px #000c,inset 0 -4px 8px #00000066;
 }
 /* 左右扳动区 */
-.mechanical-game .arcade-lever .lever-grip{
-  position:relative;
-  z-index:2;
-  min-height:50px;
-  align-self:end;
-  margin-bottom:18px;
-  border:1px solid #5b6349!important;
-  border-radius:9px!important;
-  background:linear-gradient(#2b3326,#141a12)!important;
-  box-shadow:inset 0 1px 0 #ffffff1f,0 3px 0 #0a0d08,0 6px 10px #0009!important;
-  color:#cdd6c0;
-  font-size:18px!important;
-}
-.mechanical-game .arcade-lever .lever-left:after{content:"◀"}
-.mechanical-game .arcade-lever .lever-right:after{content:"▶"}
-.mechanical-game .arcade-lever .lever-grip:active:not(:disabled),
-.arcade-lever.is-left .lever-left,
-.arcade-lever.is-right .lever-right{
-  transform:translateY(3px);
-  border-color:#e0c66e!important;
-  background:linear-gradient(#6d5a31,#3a2f16)!important;
-  box-shadow:inset 0 2px 6px #000a!important;
-  color:#ffeeb6;
-}
-/* 读数 */
 .lever-readout{
   position:absolute;
-  left:50%;bottom:2px;
+  left:50%;bottom:0;
   transform:translateX(-50%);
   min-width:104px;
   padding:3px 12px;
@@ -418,7 +388,8 @@
 .stick-hint-right{right:6px}
 .arcade-stick.is-pushed .stick-hint{color:#e0c66e}
 /* 抓取面：盖住整块底座，指针按在哪都能推 */
-.mechanical-game .arcade-stick .stick-grab{
+.mechanical-game .arcade-stick .stick-grab,
+.mechanical-game .arcade-lever .stick-grab{
   position:absolute;
   inset:0;
   min-height:0!important;
@@ -430,10 +401,14 @@
   cursor:grab;
   touch-action:none;
 }
-.mechanical-game .arcade-stick.is-holding .stick-grab{cursor:grabbing}
-.mechanical-game .arcade-stick .stick-grab:hover:not(:disabled){filter:none}
-.mechanical-game .arcade-stick .stick-grab:active:not(:disabled){transform:none}
-.mechanical-game .arcade-stick .stick-grab:focus-visible{outline:3px solid var(--gold-bright);outline-offset:2px}
+.mechanical-game .arcade-stick.is-holding .stick-grab,
+.mechanical-game .arcade-lever.is-holding .stick-grab{cursor:grabbing}
+.mechanical-game .arcade-stick .stick-grab:hover:not(:disabled),
+.mechanical-game .arcade-lever .stick-grab:hover:not(:disabled){filter:none}
+.mechanical-game .arcade-stick .stick-grab:active:not(:disabled),
+.mechanical-game .arcade-lever .stick-grab:active:not(:disabled){transform:none}
+.mechanical-game .arcade-stick .stick-grab:focus-visible,
+.mechanical-game .arcade-lever .stick-grab:focus-visible{outline:3px solid var(--gold-bright);outline-offset:2px}
 .arcade-stick.is-disabled{opacity:.42}
 .arcade-stick.is-disabled .lever-knob{filter:grayscale(.7)}
 .mechanical-game .arcade-stick.is-disabled .stick-grab{cursor:not-allowed}
