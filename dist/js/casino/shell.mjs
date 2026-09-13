@@ -21,7 +21,7 @@ export function createCasinoShell(registry){
     for(const game of games)for(const action of game.instance?.lobbyActions||[]){const button=document.createElement('button');button.type='button';button.className=`gateway-action ${action.className||''}`;button.textContent=action.label;button.onclick=action.run;actions.append(button)}
   }
   function show(screen='games'){
-    registry.leave();document.querySelectorAll('dialog[open]').forEach(dialog=>dialog.close());document.body.classList.add('arcade-menu-open');document.body.classList.remove('mode-roulette','mode-fruit');gateway.hidden=false;$('.gateway-welcome',gateway).hidden=screen!=='welcome';$('.gateway-games',gateway).hidden=screen==='welcome';history.replaceState(null,'',location.pathname+location.search);render();
+    registry.leave();document.querySelectorAll('dialog[open]').forEach(dialog=>dialog.close());document.body.classList.add('arcade-menu-open');document.body.classList.remove('mode-roulette','mode-fruit','mode-mechanical','mode-coin-pusher','mode-plinko');gateway.hidden=false;$('.gateway-welcome',gateway).hidden=screen!=='welcome';$('.gateway-games',gateway).hidden=screen==='welcome';history.replaceState(null,'',location.pathname+location.search);render();
   }
   function enter(id){gateway.hidden=true;document.body.classList.remove('arcade-menu-open');registry.enter(id);history.replaceState(null,'',`${location.pathname}${location.search}#${id}`);window.scrollTo({top:0,behavior:'auto'})}
   gateway.addEventListener('click',event=>{const card=event.target.closest('[data-game]');if(card)enter(card.dataset.game)});

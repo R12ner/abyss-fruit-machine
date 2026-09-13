@@ -5,7 +5,7 @@
   "description": "A modular, static 24-cell fruit machine game.",
   "scripts": {
     "serve": "node serve.mjs",
-    "test": "node tests/game.test.mjs && node tests/bonus.test.mjs && node tests/triples-jackpot.test.mjs && node tests/coin-wallet.test.mjs && node tests/roulette.test.mjs && node tests/casino-modules.test.mjs",
-    "check": "node --check dist/js/bootstrap.mjs && node --check dist/js/casino/game-registry.mjs && node --check dist/js/casino/wallet.mjs && node --check dist/js/games/fruit/game.mjs && node --check dist/js/games/roulette/game.mjs && node --check dist/js/games/roulette/dealer-dialogue.mjs && node --check dist/js/games/fruit/audio/audio-engine.mjs && node --check dist/js/games/fruit/audio/soundtrack.mjs && node --check dist/js/games/fruit/ui/helpers.mjs && node --check dist/js/core/game.mjs && node --check dist/js/core/roulette.mjs && npm test"
+    "test": "node tests/game.test.mjs && node tests/bonus.test.mjs && node tests/triples-jackpot.test.mjs && node tests/coin-wallet.test.mjs && node tests/roulette.test.mjs && node tests/casino-modules.test.mjs && node tests/mechanical.test.mjs",
+    "check": "node --check dist/js/games/mechanical/shared.mjs && node --check dist/js/games/coin-pusher/model.mjs && node --check dist/js/games/coin-pusher/index.mjs && node --check dist/js/games/plinko/model.mjs && node --check dist/js/games/plinko/index.mjs && node --check dist/js/bootstrap.mjs && node --check dist/js/casino/game-registry.mjs && node --check dist/js/casino/wallet.mjs && node --check dist/js/games/fruit/game.mjs && node --check dist/js/games/roulette/game.mjs && node --check dist/js/games/roulette/dealer-dialogue.mjs && node --check dist/js/games/fruit/audio/audio-engine.mjs && node --check dist/js/games/fruit/audio/soundtrack.mjs && node --check dist/js/games/fruit/ui/helpers.mjs && node --check dist/js/core/game.mjs && node --check dist/js/core/roulette.mjs && npm test"
   }
 }

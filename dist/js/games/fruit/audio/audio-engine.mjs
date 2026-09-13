@@ -45,7 +45,7 @@ export function createAudioEngine({settingsButton}){
   }
 
   function playMusicStep(){
-    if(!context||context.state==='suspended'||musicVolume===0||document.body.classList.contains('mode-roulette'))return;
+    if(!context||context.state==='suspended'||musicVolume===0||!document.body.classList.contains('mode-fruit'))return;
     const sectionIndex=Math.floor(musicStep/32),local=musicStep%32;
     const [motifIndex,transpose,bassNote]=MARIMBA_SECTIONS[sectionIndex],note=MARIMBA_MOTIFS[motifIndex][local],now=context.currentTime+.02;
     if(note!==null)marimbaNote(midiFrequency(note+transpose),now,.42,local%8===0?.042:.029);

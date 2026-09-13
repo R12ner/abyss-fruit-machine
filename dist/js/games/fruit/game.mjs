@@ -205,7 +205,7 @@ function stopKeyHold(key){
 function stopAllKeyHolds(){for(const key of [...keyHolds.keys()])stopKeyHold(key)}
 function canUseFruitKeyboard(target){
   const typing=target instanceof HTMLElement&&(target.matches('input,textarea,select')||target.isContentEditable);
-  return !typing&&!document.querySelector('dialog[open]')&&!document.body.classList.contains('arcade-menu-open')&&!document.body.classList.contains('mode-roulette')&&!game.snapshot().busy;
+  return !typing&&!document.querySelector('dialog[open]')&&document.body.classList.contains('mode-fruit')&&!game.snapshot().busy;
 }
 function repeatKeyBet(key){
   const hold=keyHolds.get(key);if(!hold)return;
@@ -241,7 +241,7 @@ function saveGameState(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(gam
 function update(){
   const state=game.snapshot();
   if(state.busy)stopAllKeyHolds();
-  if(!state.busy&&state.totalFunds===0&&!subsidyDialog.open&&!document.body.classList.contains('arcade-menu-open')&&!document.body.classList.contains('mode-roulette'))subsidyDialog.showModal();
+  if(!state.busy&&state.totalFunds===0&&!subsidyDialog.open&&document.body.classList.contains('mode-fruit'))subsidyDialog.showModal();
   $('wallet').textContent=state.wallet.toLocaleString('zh-CN');
   const directInput=$('stage-amount'),rawDirectAmount=directInput.value.trim(),directAmount=Number(rawDirectAmount),validDirectAmount=rawDirectAmount!==''&&Number.isInteger(directAmount)&&directAmount>0&&directAmount<=state.wallet+state.staged;
   $('insert-value').textContent=`$${validDirectAmount?directAmount:state.staged}`;
@@ -491,7 +491,7 @@ function guess(choice){
 $('guess-small').onclick=()=>guess('small');$('guess-big').onclick=()=>guess('big');
 $('collect').onclick=()=>{if(game.collect()){update();status.textContent='已收分'}};
 start.onclick=animate;
-document.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.repeat&&e.target===document.body){e.preventDefault();animate()}});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.repeat&&e.target===document.body&&canUseFruitKeyboard(e.target)){e.preventDefault();animate()}});
 update();
 setLed('multiplier-led',0,3);
 

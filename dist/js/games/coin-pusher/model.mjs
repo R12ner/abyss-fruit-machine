@@ -1,4 +1,4 @@
-export const PUSHER = Object.freeze({left: 84, right: 636, back: 164, stroke: 78, edge: 504, radius: 13, duration: 4.2});
+export const PUSHER = Object.freeze({left: 84, right: 636, back: 164, stroke: 78, edge: 490, radius: 13, duration: 4.2});
 const finite = value => typeof value === 'number' && Number.isFinite(value);
 const whole = value => Number.isSafeInteger(value) && value >= 0;
 
@@ -9,8 +9,8 @@ export function createPusherState(raw) {
     spent: valid && whole(raw.spent) ? raw.spent : 0, won: valid && whole(raw.won) ? raw.won : 0,
     lastWin: valid && whole(raw.lastWin) ? raw.lastWin : 0, pending: null};
   if (valid) state.coins = raw.coins.map(coin => ({x: coin.x, y: coin.y, vx: finite(coin.vx) ? coin.vx : 0, vy: finite(coin.vy) ? coin.vy : 0}));
-  else for (let row = 0; row < 9; row++) for (let col = 0; col < 19; col++) {
-    state.coins.push({x: 119 + col * 26 + (row % 2) * 9, y: 262 + row * 25.5, vx: 0, vy: 0});
+  else for (let row = 0; row < 11; row++) for (let col = 0; col < 20; col++) {
+    state.coins.push({x: 108 + col * 26 + (row % 2) * 13, y: 261 + row * Math.sqrt(507), vx: 0, vy: 0});
   }
   const pending = raw?.pending;
   if (valid && pending && [1, 5].includes(pending.count) && finite(pending.aim) &&
@@ -56,9 +56,11 @@ export function stepPusher(state, dt) {
       coin.y = Math.max(face + r, coin.y);
       if (coin.y < 350) coin.x = Math.max(PUSHER.left + r, Math.min(PUSHER.right - r, coin.x));
     }
-    for (let i = 0; i < state.coins.length; i++) for (let j = i + 1; j < state.coins.length; j++) {
+    const grid = new Map();
+    for (let i = 0; i < state.coins.length; i++) {
       const a = state.coins[pass % 2 ? state.coins.length - 1 - i : i];
-      const b = state.coins[pass % 2 ? state.coins.length - 1 - j : j];
+      const gx = Math.floor(a.x / 26), gy = Math.floor(a.y / 26);
+      for (let ox = -1; ox <= 1; ox++) for (let oy = -1; oy <= 1; oy++) for (const b of grid.get(`${gx + ox},${gy + oy}`) || []) {
       let dx = b.x - a.x, dy = b.y - a.y;
       if (Math.abs(dx) >= r * 2 || Math.abs(dy) >= r * 2) continue;
       let distance = Math.hypot(dx, dy);
@@ -67,6 +69,10 @@ export function stepPusher(state, dt) {
       const overlap = (r * 2 - distance) * .5;
       a.x -= dx / distance * overlap; a.y -= dy / distance * overlap;
       b.x += dx / distance * overlap; b.y += dy / distance * overlap;
+      }
+      const key = `${gx},${gy}`;
+      if (!grid.has(key)) grid.set(key, []);
+      grid.get(key).push(a);
     }
   }
   state.coins = state.coins.filter(coin => {
