@@ -1,6 +1,6 @@
 # 深渊赌场 · ABYSS ARCADE
 
-模块化的静态街机赌场，目前包含 24 格八门水果机和单零欧式轮盘。使用模拟 USD，不支持充值、提现或兑换。
+模块化的静态街机赌场，目前包含 24 格八门水果机、单零欧式轮盘、推币机和弹珠机。使用模拟 USD，不支持充值、提现或兑换。
 
 - 在线游戏：https://abyss-fruit-arcade.omiku-9996.chatgpt.site
 - GitHub：https://github.com/R12ner/abyss-fruit-machine
@@ -10,26 +10,40 @@
 ```text
 dist/
 ├── assets/
+│   ├── chips/              # 轮盘筹码素材
 │   ├── coins/              # 街机币、BTC、USDT、USDC 独立素材
 │   └── fruits/             # 独立水果素材
+├── css/
+│   ├── base.css            # 全站设计变量：金色 / 绿绒 / 木纹配色与字体
+│   ├── lobby.css           # 赌场入口与游戏卡片
+│   ├── fruit.css           # 水果机
+│   ├── roulette.css        # 轮盘桌
+│   ├── cabinet.css         # 推币机与弹珠机共用的机柜、按钮与控制台
+│   ├── coin-pusher.css     # 推币机专属面板
+│   └── plinko.css          # 弹珠机专属面板
 ├── js/
-│   ├── bootstrap.mjs        # 组合注册表、赌场大厅与游戏模块
-│   ├── casino/
+│   ├── main.js              # 页面入口，动态载入 bootstrap
+│   ├── bootstrap.mjs        # 注册四台游戏并启动大厅
+│   ├── casino/              # 平台层：与具体玩法无关
 │   │   ├── game-registry.mjs # 游戏注册与 enter/leave 生命周期
 │   │   ├── shell.mjs         # 赌场入口、大厅卡片和游戏切换
-│   │   └── wallet.mjs        # 跨游戏共享钱包接口
-│   ├── core/
-│   │   ├── game.mjs          # 水果机纯规则
-│   │   └── roulette.mjs      # 轮盘纯规则
-│   └── games/
-│       ├── fruit/            # 水果机清单、生命周期、UI 与音频
-│       └── roulette/         # 轮盘清单、生命周期与交互
-├── app.js                   # 兼容启动器
-├── index.html
-├── style.css                # 水果机样式
-└── roulette.css             # 轮盘与赌场大厅样式
+│   │   ├── wallet.mjs        # 跨游戏共享钱包接口
+│   │   ├── cabinet.mjs       # 机台外壳：机柜、顶灯、控制台、说明书
+│   │   ├── canvas.mjs        # 绘制原语：透视投影、硬币、绿绒、金边、玻璃
+│   │   ├── audio.mjs         # 实时合成的机台音效
+│   │   ├── effects.mjs       # 画面震动与漂浮文字
+│   │   └── storage.mjs       # 存档、金额格式化与安全随机数
+│   └── games/               # 每台游戏自成一个目录，规则统一叫 rules.mjs
+│       ├── fruit/            # rules / game / audio / ui
+│       ├── roulette/         # rules / game / dealer-dialogue
+│       ├── coin-pusher/      # rules / index
+│       └── plinko/           # rules / index
+└── index.html
+scripts/                     # 遍历式的测试与语法检查脚本
 tests/                       # 核心规则和资金守恒测试
 ```
+
+分层约定：`casino/` 是与玩法无关的平台层，`games/<id>/` 是插件。每个游戏目录都自带纯规则 `rules.mjs`（无 DOM、可直接被测试 import）和界面入口 `index.mjs`，游戏之间互不引用，只通过 `casino/` 的注册表和钱包通信。样式同样一游戏一份，公共设计变量集中在 `base.css`。
 
 音乐由 `soundtrack.mjs` 中的音符数据驱动，并由 `audio-engine.mjs` 在浏览器内实时合成，因此不依赖隐藏的 MP3 文件。修改编曲、奖项旋律和音频引擎时互不影响。
 
@@ -54,7 +68,7 @@ export const coinPusherGameDefinition = {
 };
 ```
 
-然后只需在 `bootstrap.mjs` 导入并调用 `registry.register(...)`。推币机可通过公共 `wallet.balance()`、`wallet.spend(amount)` 和 `wallet.deposit(amount)` 使用同一模拟钱包，不需要依赖水果机或轮盘内部实现。
+然后只需在 `bootstrap.mjs` 导入并调用 `registry.register(...)`。新游戏通过公共 `wallet.balance()`、`wallet.spend(amount)` 和 `wallet.deposit(amount)` 使用同一模拟钱包，不需要依赖其他游戏的内部实现。做成实体机台的话，直接用 `casino/cabinet.mjs` 的 `createCabinet()` 就能拿到与推币机、弹珠机一致的机柜外观。
 
 ## 本地运行
 
@@ -113,6 +127,8 @@ npm run check
 
 ### 手感与表现
 
-`dist/js/games/mechanical/shared.mjs` 提供了两台机台共用的表现层：`playTone` / `playClink`（噪声金属撞击）/ `playFanfare`（分级琶音）/ `playThud`、`createShaker()` 画面震动、`createFloaters()` 漂浮文字，以及带种类皮肤的 `drawCoin()`。中奖等级越高，震动幅度、漂浮文字字号和琶音音符数都会跟着提升。
+表现层拆在 `dist/js/casino/` 下，两台机台共用：`audio.mjs` 提供 `playTone` / `playClink`（噪声金属撞击）/ `playFanfare`（分级琶音）/ `playThud`，`effects.mjs` 提供 `createShaker()` 画面震动和 `createFloaters()` 漂浮文字，`canvas.mjs` 提供透视投影 `createPerspective()`、带厚度与种类皮肤的 `drawCoin()`、金色双线包边 `strokeGoldBezel()` 和玻璃罩 `drawGlass()`。中奖等级越高，震动幅度、漂浮文字字号和琶音音符数都会跟着提升。
 
-素材分别位于 `dist/assets/coin-pusher/` 和 `dist/assets/plinko/`；规则模块和界面分别位于对应 `dist/js/games/` 子目录。`tests/mechanical.test.mjs` 覆盖 12 张赔付表的对称性 / 单调性 / 返还率区间、8 与 16 层的全部落球路径（2^8 + 2^16 条）、12 层 4096 条路径的分布与整额结算、金钉命中、推球改写落点、蓄能翻倍、推币机倍率区与侧槽判定、彩金代币、连锁、回收、摇台以及全部存档恢复与脏数据清洗。
+推币机的台面是单点透视绘制的：物理模型仍在未投影的平面坐标里运算，绘制时才按深度把横坐标向画面深处收窄，硬币半径和厚度一并缩放，并按 y 排序后作画，于是近处的币会压住远处的币。左右内墙、后墙凹槽和前沿唇口的落差共同构成往机箱里看的纵深。点击台面瞄准时再用 `perspective.unproject()` 把屏幕坐标换算回模型坐标。
+
+两张大厅封面沿用水果机和轮盘的实拍道具画风：推币机是三枚从金色唇口倾泻的硬币（`dist/assets/coins/`），弹珠机是一颗落向金钉阵的球，钉阵由 `pegFieldArt()` 生成 SVG。规则模块和界面分别位于对应 `dist/js/games/` 子目录。`tests/mechanical.test.mjs` 覆盖 12 张赔付表的对称性 / 单调性 / 返还率区间、8 与 16 层的全部落球路径（2^8 + 2^16 条）、12 层 4096 条路径的分布与整额结算、金钉命中、推球改写落点、蓄能翻倍、推币机倍率区与侧槽判定、彩金代币、连锁、回收、摇台以及全部存档恢复与脏数据清洗。

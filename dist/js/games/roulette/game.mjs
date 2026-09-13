@@ -1,4 +1,4 @@
-import {ROULETTE_SEQUENCE,createDealerIntel,describeBet,groupPayoutChips,isRouletteBankrupt,numberColor,restoreDealerIntel,settleBets} from '../../core/roulette.mjs';
+import {ROULETTE_SEQUENCE,createDealerIntel,describeBet,groupPayoutChips,isRouletteBankrupt,numberColor,restoreDealerIntel,settleBets} from './rules.mjs';
 import {DEALER_SAYINGS,formatDealerSaying} from './dealer-dialogue.mjs';
 
 const CHIP_VALUES=[1,5,25,100,500,1000,5000,10000];

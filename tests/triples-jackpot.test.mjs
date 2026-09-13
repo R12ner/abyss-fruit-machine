@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {createGame as rawCreateGame,drawBonus,triples,route} from '../dist/js/core/game.mjs';
+import {createGame as rawCreateGame,drawBonus,triples,route} from '../dist/js/games/fruit/rules.mjs';
 const createGame=()=>{const g=rawCreateGame();g.stageCoins(10,10);g.insertStaged();return g};
 const noBonus=()=>({type:null,indices:[]}),jackpot=()=>({type:'jackpot',indices:[]});
 const frequencies={};

@@ -1,5 +1,5 @@
 import {createAudioEngine} from './audio/audio-engine.mjs';
-import {createGame,route,symbols} from '../../core/game.mjs';
+import {createGame,route,symbols} from './rules.mjs';
 import {$,bindAcceleratingHold,ringPositions,setLed,sprite} from './ui/helpers.mjs';
 
 let fruitInstance=null;

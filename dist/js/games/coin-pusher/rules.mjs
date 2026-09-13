@@ -2,6 +2,8 @@ export const PUSHER = Object.freeze({
   left: 84, right: 636, back: 164, stroke: 78, edge: 490, radius: 13, duration: 4.2,
   // 前沿有效区间；区间之外（更靠边）的落币掉进侧槽。
   frontLeft: 128, frontRight: 592,
+  // 投币口可选范围，瞄准滑杆 0~1 映射到 dropLeft ~ dropLeft+dropSpan。
+  dropLeft: 112, dropSpan: 496, dropY: 180,
   maxCoins: 260,
   tiltMax: 3, tiltRecharge: 11, tiltImpulse: 168, tiltSettle: .95,
   jackpotSeed: 60, jackpotPerCoin: .12,
@@ -137,7 +139,8 @@ export function stepPusher(state, dt) {
     while (pending.inserted < pending.count && pending.time >= pending.inserted * .22) {
       const offset = pending.count === 1 ? 0 : (pending.inserted - 2) * 15;
       state.coins.push({
-        x: Math.max(112, Math.min(608, 112 + pending.aim * 496 + offset)), y: 180,
+        x: Math.max(PUSHER.dropLeft, Math.min(PUSHER.dropLeft + PUSHER.dropSpan, PUSHER.dropLeft + pending.aim * PUSHER.dropSpan + offset)),
+        y: PUSHER.dropY,
         vx: 0, vy: 95, kind: pending.kinds[pending.inserted],
       });
       pending.inserted++;

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {createGame as rawCreateGame,drawBonus,route} from '../dist/js/core/game.mjs';
+import {createGame as rawCreateGame,drawBonus,route} from '../dist/js/games/fruit/rules.mjs';
 const createGame=()=>{const g=rawCreateGame();g.stageCoins(10,10);g.insertStaged();return g};
 const none=()=>({type:null,indices:[]});
 function sequence(values){let i=0;return max=>{const value=values[i++];assert.ok(value>=0&&value<max);return value}}

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {ROULETTE_SEQUENCE,createDealerIntel,dealerIntelMatchesResult,dealerIntelTruthChance,dealerTipChance,describeBet,describeDealerIntel,groupPayoutChips,isRouletteBankrupt,numberColor,restoreDealerIntel,settleBets} from '../dist/js/core/roulette.mjs';
+import {ROULETTE_SEQUENCE,createDealerIntel,dealerIntelMatchesResult,dealerIntelTruthChance,dealerTipChance,describeBet,describeDealerIntel,groupPayoutChips,isRouletteBankrupt,numberColor,restoreDealerIntel,settleBets} from '../dist/js/games/roulette/rules.mjs';
 
 assert.equal(ROULETTE_SEQUENCE.length,37);
 assert.equal(new Set(ROULETTE_SEQUENCE).size,37);

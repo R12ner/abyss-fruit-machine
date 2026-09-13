@@ -1,0 +1,49 @@
+/*
+ * 全站设计变量。四台机器共用同一套金色 / 绿绒 / 木纹配色与字体，
+ * 各自的 css 只引用这里的变量，不再各写一套色号。
+ */
+:root{
+  /* 原有的赌场基色，轮盘桌沿用 */
+  --casino-ink:#070807;
+  --casino-green:#071d16;
+  --casino-felt:#0b3a2a;
+  --casino-gold:#d2b76c;
+  --casino-cream:#efe4bd;
+  --casino-red:#8f2528;
+
+  /* 金属层次：高光 / 本色 / 暗部 / 落影 */
+  --gold-bright:#f3dda3;
+  --gold:#d2b76c;
+  --gold-deep:#8a6c32;
+  --gold-shadow:#3d3014;
+  --brass:#b08f4c;
+
+  /* 木纹外框 */
+  --wood-light:#8b5632;
+  --wood:#754628;
+  --wood-dark:#3a2013;
+
+  /* 绿绒台面 */
+  --felt-high:#18513a;
+  --felt:#0b3a2a;
+  --felt-low:#06110b;
+
+  /* 面板与文字 */
+  --panel:#09130e;
+  --panel-edge:#5c6045;
+  --panel-deep:#040b07;
+  --cream:#efe4bd;
+  --text-dim:#8d927c;
+  --text-label:#a99d77;
+
+  /* 信号色 */
+  --signal-cyan:#8ff0ff;
+  --signal-amber:#eac86d;
+  --signal-green:#89c493;
+
+  --font-serif:Georgia,"Noto Serif SC",serif;
+  --font-mono:"Courier New",monospace;
+
+  --shadow-panel:inset 0 0 35px #0008,0 12px 35px #0008;
+  --shadow-drop:0 18px 45px #0008;
+}

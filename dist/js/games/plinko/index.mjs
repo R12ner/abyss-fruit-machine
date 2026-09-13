@@ -1,16 +1,43 @@
-import {createFrame, drawFelt, money, readState, writeState, playTone, playClink, playFanfare, playThud,
-  secureRandom, createShaker, createFloaters} from '../mechanical/shared.mjs';
+import {createCabinet} from '../../casino/cabinet.mjs';
+import {money, readState, writeState, secureRandom} from '../../casino/storage.mjs';
+import {playTone, playClink, playFanfare, playThud} from '../../casino/audio.mjs';
+import {createShaker, createFloaters} from '../../casino/effects.mjs';
+import {drawFelt, drawGlass, strokeGoldBezel} from '../../casino/canvas.mjs';
 import {ROW_OPTIONS, RISKS, RISK_KEYS, STAKES, ENERGY_GOAL, ENERGY_PER_DROP, ENERGY_PER_GOLD,
   CHARGED_MULTIPLIER, NUDGE_MAX, NUDGE_RECHARGE, GOLD_PEGS, goldBonusTenths, paytable, plinkoGeometry,
-  createPlinkoRound, restorePlinkoRound, nudgePlinkoRound, plinkoPosition, pathColumns} from './model.mjs';
+  createPlinkoRound, restorePlinkoRound, nudgePlinkoRound, plinkoPosition, pathColumns} from './rules.mjs';
 
 export const plinkoGameDefinition = Object.freeze({
   id: 'plinko', badge: 'MACHINE 03', title: '深渊弹珠机', subtitle: 'PLINKO · 金钉 · 蓄能 · 推球', cardClass: 'plinko-card',
-  art: '<span class="mechanical-card-art" aria-hidden="true"><img src="assets/plinko/machine.svg" alt=""></span>',
+  art: `<span class="plinko-card-art" aria-hidden="true">${pegFieldArt()}` +
+    `<span class="card-coin" style="background-image:url('assets/coins/usdc.png')"></span></span>`,
   create: createPlinkoGame,
 });
 
+/** 卡片封面上的钉阵：五层金钉加底部奖励槽，和机台里的钉子同一套造型。 */
+function pegFieldArt() {
+  const rows = 5, spacing = 36, pegs = [];
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col <= row; col++) {
+      pegs.push(`<circle cx="${150 + (col - row / 2) * spacing} " cy="${20 + row * 25}" r="7"/>`);
+    }
+  }
+  const left = 150 - rows / 2 * spacing, width = rows * spacing;
+  const slots = Array.from({length: 6}, (_, i) =>
+    `<rect x="${(left + i * width / 6).toFixed(1)}" y="140" width="${(width / 6 - 5).toFixed(1)}" height="9" rx="2"/>`);
+  return `<svg class="plinko-card-pegs" viewBox="0 0 300 152" preserveAspectRatio="xMidYMid meet">
+    <defs><radialGradient id="plinko-peg" cx=".34" cy=".3">
+      <stop offset="0" stop-color="#fff3cd"/><stop offset=".55" stop-color="#dcbd71"/><stop offset="1" stop-color="#6f5522"/>
+    </radialGradient></defs>
+    <g fill="url(#plinko-peg)">${pegs.join('')}</g>
+    <g fill="#9d7f3c">${slots.join('')}</g>
+  </svg>`;
+}
+
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+/** 奖励槽的三条深度基准线：槽口、正面上沿、正面下沿。 */
+const SLOT = Object.freeze({mouth: 486, top: 494, bottom: 532});
 
 export function createPlinkoGame({wallet, openLobby}) {
   const key = 'abyss-plinko-state-v2', saved = readState(key);
@@ -31,7 +58,7 @@ export function createPlinkoGame({wallet, openLobby}) {
   const trail = [], flashes = [], shaker = createShaker(), floaters = createFloaters();
   const durationFor = count => (reduced ? 1.3 : 2.6 + count * .11);
 
-  const view = createFrame({id: 'plinko', title: '深渊弹珠机', english: 'THE PLINKO CLUB', number: 'MACHINE 03', wallet, openLobby,
+  const view = createCabinet({id: 'plinko', title: '深渊弹珠机', english: 'THE PLINKO CLUB', number: 'MACHINE 03', wallet, openLobby,
     controls: `<div class="mechanical-energy"><span>深渊能量 <small>CHARGE</small></span>
         <div class="mechanical-energy-bar" aria-hidden="true"><i data-energy-fill></i></div>
         <output data-energy>0 / ${ENERGY_GOAL}</output><p data-energy-hint>投球 +${ENERGY_PER_DROP}，命中金钉 +${ENERGY_PER_GOLD}。充满后下一颗是 ×${CHARGED_MULTIPLIER} 深渊之球。</p></div>
@@ -44,9 +71,9 @@ export function createPlinkoGame({wallet, openLobby}) {
       <div class="mechanical-risk mechanical-risk-4" role="group" aria-labelledby="plinko-risk-label">${RISK_KEYS.map(name => `<button type="button" data-plinko-risk="${name}" aria-pressed="false">${RISKS[name].label}</button>`).join('')}</div>
       <button type="button" class="mechanical-launch" id="plinko-drop">释放弹珠 · 10 USD<small>DROP THE BALL</small></button>
       <button type="button" class="mechanical-burst" id="plinko-multi">连发 3 颗</button>
-      <div class="plinko-nudge"><span class="mechanical-control-label" id="plinko-nudge-label">推球 <output id="plinko-nudge-value">2 / ${NUDGE_MAX}</output></span>
-        <div class="pusher-tilt-bar" aria-hidden="true"><i data-nudge-fill></i></div>
-        <div class="pusher-tilt-row" role="group" aria-labelledby="plinko-nudge-label">
+      <div class="mechanical-gauge"><span class="mechanical-control-label" id="plinko-nudge-label">推球 <output id="plinko-nudge-value">2 / ${NUDGE_MAX}</output></span>
+        <div class="mechanical-gauge-bar" aria-hidden="true"><i data-nudge-fill></i></div>
+        <div class="mechanical-gauge-row" role="group" aria-labelledby="plinko-nudge-label">
           <button type="button" id="plinko-nudge-left">◀ 左推</button><button type="button" id="plinko-nudge-right">右推 ▶</button></div></div>
       <p>穿过钉阵按落点倍率得币。倍率包含本金，越靠两侧越难命中。</p></div>`,
     help: `<p><b>基本玩法</b>：选择面额、层数和档位，按“释放弹珠”立即扣费。每层碰钉后左右机会相同，落入 层数+1 个奖励槽之一。奖励 = 面额 × 落点倍率，已包含本金。</p>
@@ -58,6 +85,13 @@ export function createPlinkoGame({wallet, openLobby}) {
       <p>落球期间不能改面额、层数或档位。切换游戏会暂停动画；刷新后会继续已扣费的同一颗弹珠，不会重新抽取结果。结果进入出币槽，按“领取到钱包”收取。</p>`});
 
   const {context: ctx, $} = view;
+  /** 背板轮廓：上方收口成漏斗，下方是放奖励槽的平底。 */
+  const boardPath = () => {
+    ctx.beginPath();
+    ctx.moveTo(342, 69); ctx.quadraticCurveTo(360, 50, 378, 69); ctx.lineTo(657, 501);
+    ctx.quadraticCurveTo(671, 532, 639, 532); ctx.lineTo(81, 532);
+    ctx.quadraticCurveTo(49, 532, 63, 501); ctx.closePath();
+  };
   const odds = document.createElement('div'); odds.className = 'plinko-odds'; odds.setAttribute('aria-label', '从左到右的落点倍率');
   $('.mechanical-scene').after(odds);
   const persist = () => writeState(key, {bet, risk, rows, tray, energy, nudge, queue, pending, progress, history});
@@ -103,17 +137,27 @@ export function createPlinkoGame({wallet, openLobby}) {
     const count = currentRows(), geometry = plinkoGeometry(count), table = paytable(count, currentRisk());
     drawFelt(ctx);
     shaker.begin(ctx, dt);
-    ctx.fillStyle = '#0c2c1b'; ctx.strokeStyle = '#aa9050'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(342, 69); ctx.quadraticCurveTo(360, 50, 378, 69); ctx.lineTo(657, 501);
-    ctx.quadraticCurveTo(671, 532, 639, 532); ctx.lineTo(81, 532); ctx.quadraticCurveTo(49, 532, 63, 501); ctx.closePath(); ctx.fill(); ctx.stroke();
-    ctx.strokeStyle = '#d1b26433'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(360, 83); ctx.lineTo(643, 515); ctx.lineTo(77, 515); ctx.closePath(); ctx.stroke();
-    ctx.fillStyle = '#9fb69b'; ctx.textAlign = 'center'; ctx.font = '15px Georgia';
+    boardPath();
+    const board = ctx.createLinearGradient(0, 60, 0, 532);
+    board.addColorStop(0, '#0a2417'); board.addColorStop(.55, '#12402b'); board.addColorStop(1, '#071a11');
+    ctx.fillStyle = board; ctx.fill();
+    // 内侧压暗：让钉阵看起来是嵌在一块凹进去的背板里
+    ctx.save();
+    ctx.clip();
+    ctx.strokeStyle = '#00000088'; ctx.lineWidth = 22;
+    boardPath(); ctx.stroke();
+    ctx.restore();
+    boardPath();
+    strokeGoldBezel(ctx, {width: 3});
+    ctx.strokeStyle = '#d1b26433'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(360, 86); ctx.lineTo(641, 512); ctx.lineTo(79, 512); ctx.closePath(); ctx.stroke();
+    ctx.fillStyle = '#a8bda1'; ctx.textAlign = 'center'; ctx.font = '14px Georgia, serif';
     ctx.fillText(`ABYSS · PLINKO · ${count} ROWS`, 360, 28);
 
     const ball = pending ? plinkoPosition(pending, progress) : null;
     const columns = pending ? pathColumns(pending.directions) : null;
     const golden = new Set((pending?.gold || []).map(pair => `${pair[0]},${pair[1]}`));
-    const radius = Math.max(2.6, Math.min(5, geometry.spacing / 9));
+    const radius = Math.max(2.6, Math.min(6, geometry.spacing / 8));
     for (let row = 0; row < count; row++) for (let col = 0; col <= row; col++) {
       const x = geometry.pegX(row, col), y = geometry.pegY(row);
       const gold = golden.has(`${row},${col}`);
@@ -133,21 +177,38 @@ export function createPlinkoGame({wallet, openLobby}) {
       ctx.beginPath(); ctx.arc(flash.x, flash.y, 4 + t * (flash.gold ? 26 : 15), 0, Math.PI * 2); ctx.stroke();
     }
 
+    // 奖励槽画成一排有深度的斗：上沿是槽口的暗面，正面才写倍率。
     const slotWidth = Math.max(20, geometry.spacing - 4);
     table.forEach((value, index) => {
       const center = geometry.slotCenter(index), x = center - slotWidth / 2;
       const hit = !pending && last?.risk === currentRisk() && last?.rows === count && last.slot === index;
       const edge = Math.abs(index - count / 2) / (count / 2);
-      ctx.fillStyle = hit ? '#edd391' : edge > .74 ? '#87502d' : edge > .42 ? '#796038' : '#314c2f';
-      ctx.fillRect(x, 492, slotWidth, 38);
-      ctx.strokeStyle = hit ? '#fff1b8' : '#b49c61'; ctx.lineWidth = 1; ctx.strokeRect(x, 492, slotWidth, 38);
+      const tone = hit ? ['#ffeeb4', '#d8ae54'] : edge > .74 ? ['#c8713a', '#5c2f16']
+        : edge > .42 ? ['#a88448', '#4a381c'] : ['#47714318', '#1c3520'].map((c, i) => i ? '#1c3520' : '#477143');
+      ctx.fillStyle = '#05100a';
+      ctx.fillRect(x, SLOT.mouth, slotWidth, SLOT.top - SLOT.mouth);
+      const face = ctx.createLinearGradient(0, SLOT.top, 0, SLOT.bottom);
+      face.addColorStop(0, tone[0]); face.addColorStop(1, tone[1]);
+      ctx.fillStyle = face;
+      ctx.fillRect(x, SLOT.top, slotWidth, SLOT.bottom - SLOT.top);
+      if (hit) {
+        ctx.save(); ctx.shadowColor = '#ffdd82'; ctx.shadowBlur = 18;
+        ctx.strokeStyle = '#fff1b8'; ctx.lineWidth = 2; ctx.strokeRect(x, SLOT.top, slotWidth, SLOT.bottom - SLOT.top);
+        ctx.restore();
+      }
       const shown = value >= 1000 ? Math.round(value / 10) : value / 10;
       const text = `${shown}×`;
-      ctx.fillStyle = hit ? '#332713' : '#fff0c2';
-      ctx.font = `${slotWidth < 30 ? (text.length > 4 ? 10 : 12) : text.length > 4 ? 13 : 17}px Georgia`;
+      ctx.fillStyle = hit ? '#2b2109' : '#fff3cd';
+      ctx.font = `${slotWidth < 30 ? (text.length > 4 ? 10 : 12) : text.length > 4 ? 13 : 17}px Georgia, serif`;
       ctx.textAlign = 'center';
-      ctx.fillText(text, center, 517);
-      ctx.fillStyle = '#a18b55'; ctx.fillRect(center - slotWidth / 2 - 3, 469, 3, 61);
+      ctx.fillText(text, center, SLOT.top + 25);
+      // 隔板：带高光的金色立边
+      const wall = ctx.createLinearGradient(x - 4, 0, x, 0);
+      wall.addColorStop(0, '#6b5729'); wall.addColorStop(1, '#e3c87e');
+      ctx.fillStyle = wall; ctx.fillRect(x - 3, SLOT.mouth - 7, 3, SLOT.bottom - SLOT.mouth + 7);
+      if (index === table.length - 1) {
+        ctx.fillStyle = wall; ctx.fillRect(x + slotWidth, SLOT.mouth - 7, 3, SLOT.bottom - SLOT.mouth + 7);
+      }
     });
 
     if (pending) {
@@ -166,8 +227,9 @@ export function createPlinkoGame({wallet, openLobby}) {
       const resting = last && last.risk === risk && last.rows === rows;
       drawBall(resting ? geometry.slotCenter(last.slot) : 360, resting ? 480 : 53, energy >= ENERGY_GOAL);
     }
+    drawGlass(ctx);
     floaters.draw(ctx);
-    ctx.fillStyle = '#d4c190'; ctx.font = '15px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillStyle = '#d4c190'; ctx.font = '14px "Courier New", monospace'; ctx.textAlign = 'center';
     ctx.fillText(`${RISKS[currentRisk()].label}档 · ${count} 层钉阵 · ${count + 1} 个落点${pending ? ` · 推球剩 ${NUDGE_MAX - pending.nudged.length}` : ''}`, 360, 574);
     shaker.end(ctx);
   }

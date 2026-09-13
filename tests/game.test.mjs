@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {symbols,route,randomIndex,createGame as rawCreateGame} from '../dist/js/core/game.mjs';
+import {symbols,route,randomIndex,createGame as rawCreateGame} from '../dist/js/games/fruit/rules.mjs';
 const createGame=()=>{const g=rawCreateGame();g.stageCoins(10,10);g.insertStaged();const start=g.start;g.start=(choose)=>start(choose,()=>({type:null,indices:[]}));return g};
 assert.equal(route.length,24);
 assert.deepEqual(symbols.map(s=>s.slice(1)),[[120,50],[40,3],[30,3],[20,3],[20,3],[15,3],[10,3],[5,3]]);

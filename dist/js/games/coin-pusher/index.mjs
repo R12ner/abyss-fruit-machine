@@ -1,16 +1,40 @@
-import {createFrame, drawCoin, drawFelt, money, readState, writeState, playTone, playClink,
-  playFanfare, playThud, secureRandom, createShaker, createFloaters} from '../mechanical/shared.mjs';
+import {createCabinet} from '../../casino/cabinet.mjs';
+import {money, readState, writeState, secureRandom} from '../../casino/storage.mjs';
+import {playTone, playClink, playFanfare, playThud} from '../../casino/audio.mjs';
+import {createShaker, createFloaters} from '../../casino/effects.mjs';
+import {createPerspective, drawCoin, drawGlass} from '../../casino/canvas.mjs';
 import {PUSHER, ZONES, createPusherState, pusherFace, startPusherRound, stepPusher,
-  tiltPusher, rechargeTilt, isPusherIdle} from './model.mjs';
+  tiltPusher, rechargeTilt, isPusherIdle} from './rules.mjs';
 
 export const coinPusherGameDefinition = Object.freeze({
   id: 'coin-pusher', badge: 'MACHINE 02', title: '深渊推币机', subtitle: 'COIN PUSHER · 瞄准 · 摇台 · 收币', cardClass: 'pusher-card',
-  art: '<span class="mechanical-card-art" aria-hidden="true"><img src="assets/coin-pusher/machine.svg" alt=""></span>',
+  art: `<span class="pusher-card-art" aria-hidden="true">${
+    ['arcade', 'bitcoin', 'usdt'].map((coin, index) =>
+      `<span class="card-coin coin-${index}" style="background-image:url('assets/coins/${coin}.png')"></span>`).join('')}</span>`,
   create: createCoinPusherGame,
 });
 
 const ZONE_WIDTH = (PUSHER.frontRight - PUSHER.frontLeft) / ZONES.length;
-const ZONE_TINT = ['#2c4a33', '#2c4a33', '#7a5a1d', '#2c4a33', '#2c4a33'];
+
+/** 画面分层的深度基准，全部是画布坐标。 */
+const VIEW = Object.freeze({
+  farY: 74,          // 机箱最里面
+  deckTop: 138,      // 后墙与台面的交界
+  zoneTop: 330,      // 倍率分区开始的深度
+  channelTop: 350,   // 侧槽井口
+  dropY: PUSHER.dropY,
+  nearY: PUSHER.edge, // 前沿唇口，也是离玩家最近的一条线
+  trayTop: 528, trayHeight: 48,
+  plateDepth: 13,    // 推板正面的厚度
+  wallFlare: 1.24,   // 机箱开口比台面宽出的比例，决定内墙的可见宽度
+});
+
+const perspective = createPerspective({centerX: 360, farY: VIEW.farY, nearY: VIEW.nearY, farScale: .72});
+const scaleAt = y => perspective.scale(y);
+/** 台面上的模型 x 投影到画布。 */
+const px = (x, y) => perspective.at(x, y);
+/** 机箱开口（台面之外那一圈）上的模型 x 投影到画布。 */
+const wx = (x, y) => 360 + (x - 360) * perspective.scale(y) * VIEW.wallFlare;
 
 export function createCoinPusherGame({wallet, openLobby}) {
   const key = 'abyss-coin-pusher-state-v2', saved = readState(key), state = createPusherState(saved);
@@ -19,16 +43,16 @@ export function createCoinPusherGame({wallet, openLobby}) {
   let history = Array.isArray(saved?.history) ? saved.history.filter(n => Number.isSafeInteger(n) && n >= 0).slice(0, 8) : [];
   const particles = [], shaker = createShaker(), floaters = createFloaters();
 
-  const view = createFrame({id: 'coin-pusher', title: '深渊推币机', english: 'THE COIN PUSHER', number: 'MACHINE 02', wallet, openLobby,
+  const view = createCabinet({id: 'coin-pusher', title: '深渊推币机', english: 'THE COIN PUSHER', number: 'MACHINE 02', wallet, openLobby,
     controls: `<div class="mechanical-jackpot"><span>累积彩金 <small>JACKPOT</small></span><output data-jackpot>0</output>
         <p>推落一枚 ✦ 深渊代币 即可全额带走</p></div>
       <div class="mechanical-controls"><label class="mechanical-control-label" for="pusher-aim">投币位置 <output id="pusher-aim-value">正中</output></label>
       <input id="pusher-aim" type="range" min="0" max="100" step="1" value="50" aria-label="选择推币机投币位置"><div class="mechanical-control-ends"><span>左</span><span>右</span></div>
       <button type="button" class="mechanical-launch" id="pusher-insert">投一枚 · 1 USD<small>INSERT COIN</small></button>
       <button type="button" class="mechanical-burst" id="pusher-burst">连续投 5 枚 · 5 USD</button>
-      <div class="pusher-tilt"><span class="mechanical-control-label" id="pusher-tilt-label">摇台能量 <output id="pusher-tilt-value">3 / 3</output></span>
-        <div class="pusher-tilt-bar" aria-hidden="true"><i data-tilt-fill></i></div>
-        <div class="pusher-tilt-row" role="group" aria-labelledby="pusher-tilt-label">
+      <div class="mechanical-gauge"><span class="mechanical-control-label" id="pusher-tilt-label">摇台能量 <output id="pusher-tilt-value">3 / 3</output></span>
+        <div class="mechanical-gauge-bar" aria-hidden="true"><i data-tilt-fill></i></div>
+        <div class="mechanical-gauge-row" role="group" aria-labelledby="pusher-tilt-label">
           <button type="button" id="pusher-tilt-left">◀ 左摇</button><button type="button" id="pusher-tilt-right">右摇 ▶</button></div></div>
       <div class="pusher-meters"><div><span>连锁 CHAIN</span><output data-chain>0</output></div>
         <div><span>侧槽回收</span><output data-recycle>0 / 10</output></div>
@@ -69,68 +93,239 @@ export function createCoinPusherGame({wallet, openLobby}) {
     $('#pusher-tilt-left').disabled = $('#pusher-tilt-right').disabled = charges < 1;
   }
 
+  /* ---------- 画面 ----------
+   * 台面用单点透视绘制：越靠近画面下方（离玩家越近）越宽，硬币也按深度缩放，
+   * 再加上左右内墙、后墙凹槽和前沿唇口的落差，看起来才像在往机箱"里面"看。
+   * 物理模型仍使用未投影的坐标，这里只做绘制变换。
+   */
   function draw(dt = 0) {
-    drawFelt(ctx);
     shaker.begin(ctx, dt);
     const face = pusherFace(state);
-    ctx.fillStyle = '#040a07'; ctx.fillRect(65, 88, 590, 426);
-    const bed = ctx.createLinearGradient(0, 190, 0, 500); bed.addColorStop(0, '#20432f'); bed.addColorStop(1, '#296148');
-    ctx.fillStyle = bed; ctx.fillRect(84, 166, 552, 326);
-    // 前沿倍率区：台面上用竖线分区，币堆盖不住的前沿唇口再标一次倍率。
+    drawShell();
+    drawBackWall(face);
+    drawSideWalls();
+    drawDeck();
+    drawSideChannels();
+    drawPlate(face);
+    drawPile();
+    drawAim();
+    drawFrontLip();
+    drawTray();
+    for (const particle of particles) {
+      drawCoin(ctx, px(particle.x, particle.y), particle.y + particle.age ** 2 * 290,
+        PUSHER.radius * scaleAt(particle.y), view.coins, Math.max(0, 1 - particle.age / .65), particle.kind);
+    }
+    drawGlass(ctx);
+    floaters.draw(ctx);
+    drawReadout();
+    shaker.end(ctx);
+  }
+
+  /** 机箱内壁的底色与顶部压暗。外面的木框由 .mechanical-cabinet 提供，这里不再重复。 */
+  function drawShell() {
+    ctx.fillStyle = '#030a07';
+    ctx.fillRect(0, 0, 720, 600);
+    const ceiling = ctx.createLinearGradient(0, 0, 0, VIEW.deckTop);
+    ceiling.addColorStop(0, '#000000cc'); ceiling.addColorStop(1, '#00000000');
+    ctx.fillStyle = ceiling; ctx.fillRect(0, 0, 720, VIEW.deckTop);
+  }
+
+  /** 后墙：推板从这里伸出来，上方留一道压暗的顶盖。 */
+  function drawBackWall(face) {
     ctx.save();
-    ctx.setLineDash([6, 6]);
+    ctx.beginPath();
+    ctx.moveTo(wx(PUSHER.left, VIEW.farY), VIEW.farY);
+    ctx.lineTo(wx(PUSHER.right, VIEW.farY), VIEW.farY);
+    ctx.lineTo(px(PUSHER.right, VIEW.deckTop), VIEW.deckTop);
+    ctx.lineTo(px(PUSHER.left, VIEW.deckTop), VIEW.deckTop);
+    ctx.closePath();
+    const wall = ctx.createLinearGradient(0, VIEW.farY, 0, VIEW.deckTop);
+    wall.addColorStop(0, '#020604'); wall.addColorStop(.55, '#10251a'); wall.addColorStop(1, '#1b3c2a');
+    ctx.fillStyle = wall; ctx.fill();
+    // 推板出口：一道比后墙更深的横槽
+    ctx.beginPath();
+    ctx.moveTo(px(PUSHER.left + 4, VIEW.deckTop - 17), VIEW.deckTop - 17);
+    ctx.lineTo(px(PUSHER.right - 4, VIEW.deckTop - 17), VIEW.deckTop - 17);
+    ctx.lineTo(px(PUSHER.right - 4, VIEW.deckTop), VIEW.deckTop);
+    ctx.lineTo(px(PUSHER.left + 4, VIEW.deckTop), VIEW.deckTop);
+    ctx.closePath();
+    ctx.fillStyle = '#010402'; ctx.fill();
+    ctx.fillStyle = '#c8b686';
+    ctx.font = '13px Georgia, serif'; ctx.textAlign = 'center';
+    ctx.fillText('ABYSS · MECHANICAL COIN SYSTEM', 360, VIEW.farY + 28);
+    ctx.restore();
+  }
+
+  /** 左右内墙：台面边缘与机箱开口之间的那层斜面，纵深感主要来自这里。 */
+  function drawSideWalls() {
+    for (const side of [-1, 1]) {
+      const edge = side < 0 ? PUSHER.left : PUSHER.right;
+      ctx.beginPath();
+      ctx.moveTo(wx(edge, VIEW.deckTop), VIEW.deckTop);
+      ctx.lineTo(px(edge, VIEW.deckTop), VIEW.deckTop);
+      ctx.lineTo(px(edge, VIEW.nearY), VIEW.nearY);
+      ctx.lineTo(wx(edge, VIEW.nearY), VIEW.nearY);
+      ctx.closePath();
+      const near = px(edge, VIEW.nearY), far = wx(edge, VIEW.nearY);
+      const shade = ctx.createLinearGradient(Math.min(near, far), 0, Math.max(near, far), 0);
+      const bright = side < 0 ? ['#0b1a12', '#2d5540'] : ['#2d5540', '#0b1a12'];
+      shade.addColorStop(0, bright[0]); shade.addColorStop(1, bright[1]);
+      ctx.fillStyle = shade; ctx.fill();
+      ctx.strokeStyle = '#d7bd7a55'; ctx.lineWidth = 1.2; ctx.stroke();
+    }
+  }
+
+  /** 绿绒台面与前沿的五个倍率分区。 */
+  function drawDeck() {
+    perspective.trapezoid(ctx, PUSHER.left, PUSHER.right, VIEW.deckTop, VIEW.nearY);
+    const bed = ctx.createLinearGradient(0, VIEW.deckTop, 0, VIEW.nearY);
+    bed.addColorStop(0, '#143628'); bed.addColorStop(.55, '#1f5540'); bed.addColorStop(1, '#2b6b50');
+    ctx.fillStyle = bed; ctx.fill();
+    ctx.save();
+    ctx.clip();
     ZONES.forEach((multiplier, index) => {
-      const x = PUSHER.frontLeft + index * ZONE_WIDTH;
-      ctx.fillStyle = ZONE_TINT[index] + (multiplier > 1 ? 'bb' : '55');
-      ctx.fillRect(x, 330, ZONE_WIDTH, 162);
+      const left = PUSHER.frontLeft + index * ZONE_WIDTH;
+      perspective.trapezoid(ctx, left, left + ZONE_WIDTH, VIEW.zoneTop, VIEW.nearY);
+      const tint = ctx.createLinearGradient(0, VIEW.zoneTop, 0, VIEW.nearY);
+      if (multiplier > 1) {tint.addColorStop(0, '#6b511c55'); tint.addColorStop(1, '#a87f24aa');}
+      else {tint.addColorStop(0, '#1e3f2c44'); tint.addColorStop(1, '#2a5a3f66');}
+      ctx.fillStyle = tint; ctx.fill();
       if (index) {
-        ctx.strokeStyle = '#f3dda366'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(x, 330); ctx.lineTo(x, 492); ctx.stroke();
+        ctx.strokeStyle = '#f3dda355'; ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(px(left, VIEW.zoneTop), VIEW.zoneTop);
+        ctx.lineTo(px(left, VIEW.nearY), VIEW.nearY);
+        ctx.stroke();
       }
     });
     ctx.restore();
-    ctx.strokeStyle = '#c5a45c'; ctx.lineWidth = 3; ctx.strokeRect(83, 85, 554, 426);
-    // 侧槽
-    ctx.fillStyle = '#060d08';
-    ctx.fillRect(85, 350, PUSHER.frontLeft - 85, 144);
-    ctx.fillRect(PUSHER.frontRight, 350, 636 - PUSHER.frontRight, 144);
-    ctx.strokeStyle = '#3c4a38'; ctx.lineWidth = 1;
-    ctx.strokeRect(85.5, 350.5, PUSHER.frontLeft - 86, 143);
-    ctx.strokeRect(PUSHER.frontRight + .5, 350.5, 635 - PUSHER.frontRight, 143);
-    // 推板
-    const plate = ctx.createLinearGradient(0, face - 65, 0, face + 8); plate.addColorStop(0, '#4c5239'); plate.addColorStop(.7, '#979065'); plate.addColorStop(1, '#dec988');
-    ctx.fillStyle = plate; ctx.fillRect(87, 93, 546, face - 93);
-    ctx.fillStyle = '#e6d396'; ctx.fillRect(87, face - 4, 546, 4);
-    ctx.fillStyle = '#342c18'; ctx.fillRect(87, face, 546, 9);
-    ctx.textAlign = 'center'; ctx.fillStyle = '#e2d3a9'; ctx.font = '16px Georgia'; ctx.fillText('ABYSS · MECHANICAL COIN SYSTEM', 360, 126);
-    ctx.strokeStyle = '#ced4a222'; ctx.lineWidth = 1;
-    for (let x = 105; x < 635; x += 22) {ctx.beginPath(); ctx.moveTo(x, 140); ctx.lineTo(x, face - 12); ctx.stroke();}
-    for (const coin of state.coins) drawCoin(ctx, coin.x, coin.y, PUSHER.radius, view.coins, 1, coin.kind);
-    // 瞄准线
-    const target = 112 + aim * 496;
-    ctx.strokeStyle = '#ffe3a177'; ctx.lineWidth = 1; ctx.setLineDash([5, 7]); ctx.beginPath(); ctx.moveTo(target, 63); ctx.lineTo(target, 243); ctx.stroke(); ctx.setLineDash([]);
-    ctx.fillStyle = '#f2d68a'; ctx.beginPath(); ctx.moveTo(target - 10, 62); ctx.lineTo(target + 10, 62); ctx.lineTo(target, 79); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#a18c57'; ctx.font = '14px sans-serif'; ctx.fillText('投 币 位 置', 360, 36);
-    const rim = ctx.createLinearGradient(0, 489, 0, 520); rim.addColorStop(0, '#e0c177'); rim.addColorStop(.4, '#87703c'); rim.addColorStop(1, '#302615');
-    ctx.fillStyle = rim; ctx.fillRect(82, 490, 556, 28);
-    // 唇口倍率标尺：始终不会被币堆遮住。
+  }
+
+  /** 侧槽：台面两侧向下塌陷的深井，币掉进去只计回收。 */
+  function drawSideChannels() {
+    for (const [outer, inner] of [[PUSHER.left, PUSHER.frontLeft], [PUSHER.right, PUSHER.frontRight]]) {
+      perspective.trapezoid(ctx, Math.min(outer, inner), Math.max(outer, inner), VIEW.channelTop, VIEW.nearY + 4);
+      const well = ctx.createLinearGradient(0, VIEW.channelTop, 0, VIEW.nearY);
+      well.addColorStop(0, '#132a1e'); well.addColorStop(.22, '#040b07'); well.addColorStop(1, '#020604');
+      ctx.fillStyle = well; ctx.fill();
+      ctx.strokeStyle = '#bda66388'; ctx.lineWidth = 1.4; ctx.stroke();
+      // 井口内壁的一道高光，强调这里是往下掉的
+      ctx.beginPath();
+      ctx.moveTo(px(inner, VIEW.channelTop), VIEW.channelTop);
+      ctx.lineTo(px(inner, VIEW.nearY), VIEW.nearY);
+      ctx.strokeStyle = '#8fc4a355'; ctx.lineWidth = 2.5; ctx.stroke();
+    }
+  }
+
+  /** 推板：顶面加正面两块，正面的厚度让它像一块真的在推的铁板。 */
+  function drawPlate(face) {
+    const top = VIEW.deckTop - 8;
+    perspective.trapezoid(ctx, PUSHER.left + 3, PUSHER.right - 3, top, face);
+    const deck = ctx.createLinearGradient(0, top, 0, face);
+    deck.addColorStop(0, '#20271c'); deck.addColorStop(.6, '#444a33'); deck.addColorStop(1, '#6d6d4c');
+    ctx.fillStyle = deck; ctx.fill();
+    // 拉丝纹理
+    ctx.save(); ctx.clip();
+    ctx.strokeStyle = '#ced4a218'; ctx.lineWidth = 1;
+    for (let x = PUSHER.left; x < PUSHER.right; x += 22) {
+      ctx.beginPath(); ctx.moveTo(px(x, top), top); ctx.lineTo(px(x, face), face); ctx.stroke();
+    }
+    ctx.restore();
+    // 正面立边
+    const lip = face + VIEW.plateDepth;
+    ctx.beginPath();
+    ctx.moveTo(px(PUSHER.left + 3, face), face);
+    ctx.lineTo(px(PUSHER.right - 3, face), face);
+    ctx.lineTo(px(PUSHER.right - 3, lip), lip);
+    ctx.lineTo(px(PUSHER.left + 3, lip), lip);
+    ctx.closePath();
+    const front = ctx.createLinearGradient(0, face, 0, lip);
+    front.addColorStop(0, '#f4e4ab'); front.addColorStop(.35, '#8e814f'); front.addColorStop(1, '#191409');
+    ctx.fillStyle = front; ctx.fill();
+    ctx.strokeStyle = '#00000088'; ctx.lineWidth = 1; ctx.stroke();
+  }
+
+  /** 币堆：先按深度排序再画，近处的币才会压住远处的币。 */
+  function drawPile() {
+    const sorted = [...state.coins].sort((a, b) => a.y - b.y);
+    for (const coin of sorted) {
+      const scale = scaleAt(coin.y);
+      drawCoin(ctx, px(coin.x, coin.y), coin.y, PUSHER.radius * scale, view.coins, 1, coin.kind, PUSHER.radius * .45 * scale);
+    }
+  }
+
+  /** 投币瞄准线：从机箱顶部一直指到落币深度。 */
+  function drawAim() {
+    const x = px(PUSHER.dropLeft + aim * PUSHER.dropSpan, VIEW.dropY);
+    const top = px(PUSHER.dropLeft + aim * PUSHER.dropSpan, VIEW.farY + 34);
+    ctx.save();
+    ctx.strokeStyle = '#ffe3a188'; ctx.lineWidth = 1.5; ctx.setLineDash([5, 7]);
+    ctx.beginPath(); ctx.moveTo(top, VIEW.farY + 34); ctx.lineTo(x, VIEW.dropY); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#f2d68a';
+    ctx.beginPath();
+    ctx.moveTo(top - 10, VIEW.farY + 32); ctx.lineTo(top + 10, VIEW.farY + 32); ctx.lineTo(top, VIEW.farY + 49);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#9d8a5c'; ctx.font = '12px "Courier New", monospace'; ctx.textAlign = 'center';
+    ctx.fillText('投 币 位 置', 360, VIEW.farY - 18);
+    ctx.restore();
+  }
+
+  /** 前沿：金色唇口加倍率标尺，永远不会被币堆遮住。 */
+  function drawFrontLip() {
+    const top = VIEW.nearY, bottom = VIEW.nearY + 30;
+    ctx.beginPath();
+    ctx.moveTo(px(PUSHER.left, top), top);
+    ctx.lineTo(px(PUSHER.right, top), top);
+    ctx.lineTo(wx(PUSHER.right, bottom), bottom);
+    ctx.lineTo(wx(PUSHER.left, bottom), bottom);
+    ctx.closePath();
+    const rim = ctx.createLinearGradient(0, top, 0, bottom);
+    rim.addColorStop(0, '#f0d590'); rim.addColorStop(.35, '#9a7f46'); rim.addColorStop(1, '#2b2213');
+    ctx.fillStyle = rim; ctx.fill();
     ZONES.forEach((multiplier, index) => {
-      const x = PUSHER.frontLeft + index * ZONE_WIDTH;
-      ctx.fillStyle = multiplier > 1 ? '#6d4f14' : '#1d2416';
-      ctx.fillRect(x + 1, 493, ZONE_WIDTH - 2, 22);
+      const left = PUSHER.frontLeft + index * ZONE_WIDTH, right = left + ZONE_WIDTH;
+      const y = top + 4, height = 21;
+      ctx.beginPath();
+      ctx.moveTo(px(left + 1, y), y); ctx.lineTo(px(right - 1, y), y);
+      ctx.lineTo(px(right - 1, y + height), y + height); ctx.lineTo(px(left + 1, y + height), y + height);
+      ctx.closePath();
+      ctx.fillStyle = multiplier > 1 ? '#6d4f14' : '#1d2416'; ctx.fill();
       ctx.fillStyle = multiplier > 1 ? '#ffe9a6' : '#9fb79f';
-      ctx.font = `${multiplier > 1 ? 'bold 17' : '14'}px Georgia`; ctx.textAlign = 'center';
-      ctx.fillText(`×${multiplier}`, x + ZONE_WIDTH / 2, 510);
+      ctx.font = `${multiplier > 1 ? 'bold 17' : '14'}px Georgia, serif`; ctx.textAlign = 'center';
+      ctx.fillText(`×${multiplier}`, px((left + right) / 2, y + height), y + height - 4);
     });
-    ctx.fillStyle = '#8ba07f'; ctx.font = '12px sans-serif';
-    ctx.fillText('侧槽', 106, 510); ctx.fillText('侧槽', 614, 510);
-    ctx.fillStyle = '#030705'; ctx.fillRect(100, 522, 520, 47); ctx.strokeStyle = '#7c683b'; ctx.strokeRect(100, 522, 520, 47);
-    for (let i = 0; i < Math.min(state.tray, 28); i++) drawCoin(ctx, 127 + (i % 17) * 28, 556 - Math.floor(i / 17) * 10, 13, view.coins);
-    for (const particle of particles) drawCoin(ctx, particle.x, particle.y + particle.age ** 2 * 290, 13, view.coins, Math.max(0, 1 - particle.age / .65), particle.kind);
-    floaters.draw(ctx);
-    ctx.fillStyle = '#dac181'; ctx.font = '15px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText(`彩金 ${money(state.jackpot)} USD · 连锁 ${state.chain} · 免费币 ${state.free}`, 360, 590);
-    shaker.end(ctx);
+    ctx.fillStyle = '#8ba07f'; ctx.font = '11px "Courier New", monospace';
+    ctx.fillText('侧槽', px((PUSHER.left + PUSHER.frontLeft) / 2, top + 18), top + 20);
+    ctx.fillText('侧槽', px((PUSHER.right + PUSHER.frontRight) / 2, top + 18), top + 20);
+  }
+
+  /** 出币槽：机箱下方的独立溜槽，不参与台面透视。 */
+  function drawTray() {
+    const {trayTop: top, trayHeight: height} = VIEW;
+    const chute = ctx.createLinearGradient(0, top - 8, 0, top + height);
+    chute.addColorStop(0, '#2b2213'); chute.addColorStop(.18, '#0a0f0a'); chute.addColorStop(1, '#020604');
+    ctx.fillStyle = chute; ctx.fillRect(96, top - 8, 528, height + 8);
+    ctx.strokeStyle = '#8a7440'; ctx.lineWidth = 2; ctx.strokeRect(96, top - 8, 528, height + 8);
+    ctx.strokeStyle = '#e0c17744'; ctx.lineWidth = 1; ctx.strokeRect(99, top - 5, 522, height + 2);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(97, top - 7, 526, height + 6); ctx.clip();
+    if (state.tray) {
+      for (let i = 0; i < Math.min(state.tray, 28); i++) {
+        drawCoin(ctx, 127 + (i % 17) * 28, top + 34 - Math.floor(i / 17) * 10, 13, view.coins, 1, 'normal', 5);
+      }
+    } else {
+      ctx.fillStyle = '#3f4a3a'; ctx.font = '13px "Courier New", monospace'; ctx.textAlign = 'center';
+      ctx.fillText('C O I N   O U T', 360, top + height / 2 + 4);
+    }
+    ctx.restore();
+  }
+
+  function drawReadout() {
+    ctx.fillStyle = '#dac181';
+    ctx.font = '14px "Courier New", monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(`彩金 ${money(state.jackpot)} USD · 连锁 ${state.chain} · 免费币 ${state.free}`, 360, 592);
   }
 
   function handle(event) {
@@ -218,7 +413,8 @@ export function createCoinPusherGame({wallet, openLobby}) {
   view.canvas.addEventListener('pointerdown', event => {
     if (state.pending) return;
     const rect = view.canvas.getBoundingClientRect();
-    aim = Math.max(0, Math.min(1, ((event.clientX - rect.left) / rect.width * 720 - 112) / 496));
+    const modelX = perspective.unproject((event.clientX - rect.left) / rect.width * 720, VIEW.dropY);
+    aim = Math.max(0, Math.min(1, (modelX - PUSHER.dropLeft) / PUSHER.dropSpan));
     slider.value = Math.round(aim * 100); render(); draw(); persist();
   });
   $('.mechanical-collect').onclick = () => {

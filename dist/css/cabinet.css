@@ -1,0 +1,545 @@
+/*
+ * 机台外壳：推币机与弹珠机共用的机柜、顶灯、控制台、按钮与说明书。
+ * 配色、字体和收边方式与轮盘桌保持一致——木纹外框、金色双线、衬线标题、等宽读数。
+ */
+
+.mechanical-game[hidden]{display:none!important}
+body.mode-mechanical>header,body.mode-mechanical>main{display:none}
+
+.mechanical-game{
+  min-height:100vh;
+  background:
+    radial-gradient(ellipse at 50% 0,#16392a 0,#0a1b12 46%,#040806 78%),
+    var(--casino-ink);
+  color:var(--casino-cream);
+  font-family:var(--font-mono);
+  font-size:16px;
+}
+
+/* ---------- 顶栏 ---------- */
+
+.mechanical-header{
+  min-height:78px;
+  padding:10px max(14px,3vw);
+  display:grid;
+  grid-template-columns:auto 1fr auto auto auto;
+  gap:14px;
+  align-items:center;
+  background:linear-gradient(#0b0f0c,#070a08);
+  border-bottom:1px solid var(--gold-deep);
+  box-shadow:0 7px 30px #0009;
+}
+.mechanical-brand{justify-self:center;text-align:center}
+.mechanical-brand small{
+  display:block;
+  color:#887f62;
+  font-size:10px;
+  letter-spacing:3px;
+}
+.mechanical-brand strong{
+  display:block;
+  margin-top:3px;
+  color:#e2d4a8;
+  font:700 25px var(--font-serif);
+  letter-spacing:5px;
+}
+.mechanical-wallet{
+  min-width:145px;
+  padding:8px 15px;
+  border:1px solid #4c4c36;
+  border-radius:4px;
+  background:var(--panel-deep);
+  text-align:right;
+}
+.mechanical-wallet span{display:block;color:#858875;font-size:10px;letter-spacing:1px}
+.mechanical-wallet output{
+  display:block;
+  color:#ead687;
+  font:700 21px var(--font-mono);
+  font-variant-numeric:tabular-nums;
+}
+
+/* ---------- 按钮系统 ----------
+ * 三个层级：主按钮是凸起的红色实体键，次按钮是黄铜压板，
+ * 切换键平时凹陷、按下时点亮。全部带 4px 行程，按下去有真实的下沉感。
+ */
+
+.mechanical-game button{
+  min-height:44px;
+  padding:10px 16px;
+  border:1px solid #6f6a49;
+  border-radius:9px;
+  background:linear-gradient(#2b3327,#161d16);
+  box-shadow:inset 0 1px #ffffff14,0 3px 0 #0c110c,0 5px 10px #0007;
+  color:#eee1ba;
+  font:13px var(--font-mono);
+  letter-spacing:1px;
+  cursor:pointer;
+  transition:filter .15s,transform .12s,box-shadow .12s;
+}
+.mechanical-game button:hover:not(:disabled){filter:brightness(1.18)}
+.mechanical-game button:active:not(:disabled){
+  transform:translateY(3px);
+  box-shadow:inset 0 2px 5px #000a,0 0 0 #0c110c;
+}
+.mechanical-game button:disabled{cursor:not-allowed;opacity:.38;box-shadow:inset 0 2px 6px #0008}
+.mechanical-game button:focus-visible,
+.mechanical-game input:focus-visible{outline:3px solid var(--gold-bright);outline-offset:4px}
+
+/* 顶栏圆形小键，与轮盘的规则按钮同型 */
+.mechanical-game .mechanical-sound,.mechanical-game .mechanical-help{
+  width:42px;height:42px;
+  padding:0;
+  border-radius:50%;
+  border-color:#797354;
+  background:radial-gradient(circle at 36% 30%,#3b4234,#1b211a 70%);
+  color:#e7d792;
+  font:700 20px var(--font-serif);
+}
+.mechanical-game .mechanical-sound[aria-pressed=true]{
+  border-color:var(--gold-bright);
+  background:radial-gradient(circle at 36% 30%,#8c7238,#4a3a19 72%);
+  color:#fff3c8;
+  box-shadow:0 0 14px #d7bd5d66,inset 0 1px #ffffff2e;
+}
+.mechanical-game .mechanical-back{
+  justify-self:start;
+  border-color:#5f5d45;
+  background:linear-gradient(#1c231b,#11160f);
+  color:#d8c787;
+}
+
+/* 主按钮：红色穹面实体键 */
+.mechanical-game .mechanical-launch{
+  min-height:64px;
+  border:3px solid #35171a;
+  border-radius:14px;
+  background:
+    radial-gradient(ellipse at 38% 26%,#e07b6f 0,#a93a36 42%,#7c2225 72%,#54171a 100%);
+  box-shadow:
+    0 0 0 3px #927754,
+    inset 0 2px 3px #ffffff55,
+    inset 0 -6px 12px #00000066,
+    0 6px 0 #24090b,
+    0 12px 22px #0009;
+  color:#fff2d1;
+  font:700 17px var(--font-serif);
+  letter-spacing:3px;
+}
+.mechanical-game .mechanical-launch:active:not(:disabled){
+  transform:translateY(5px);
+  box-shadow:0 0 0 3px #927754,inset 0 3px 8px #00000088,0 1px 0 #24090b;
+}
+.mechanical-launch small{
+  display:block;
+  margin-top:4px;
+  font:11px var(--font-mono);
+  letter-spacing:3px;
+  color:#f0c4b6;
+}
+
+/* 次按钮：黄铜压板 */
+.mechanical-game .mechanical-burst,
+.mechanical-game .mechanical-collect{
+  width:100%;
+  border-color:#b19853;
+  background:linear-gradient(#7d6a39,#41371d);
+  box-shadow:inset 0 1px #ffe7a855,0 4px 0 #241d0d,0 7px 14px #0008;
+  color:#f9e8ae;
+  font-weight:700;
+}
+.mechanical-game .mechanical-burst:active:not(:disabled),
+.mechanical-game .mechanical-collect:active:not(:disabled){
+  transform:translateY(4px);
+  box-shadow:inset 0 2px 6px #000a,0 0 0 #241d0d;
+}
+
+/* 切换键：默认凹陷的暗槽，选中时点亮成金色 */
+.mechanical-options button,
+.mechanical-rows button,
+.mechanical-risk button,
+.mechanical-nudge-row button{
+  border-color:#3f4a38;
+  background:linear-gradient(#151d15,#0c120c);
+  box-shadow:inset 0 2px 6px #000a;
+  color:#9fae9b;
+}
+.mechanical-options button[aria-pressed=true],
+.mechanical-rows button[aria-pressed=true],
+.mechanical-risk button[aria-pressed=true]{
+  border-color:var(--gold-bright);
+  background:linear-gradient(#8a7340,#4c3c1b);
+  box-shadow:inset 0 0 0 1px #be9d48,inset 0 1px #ffe9b055,0 0 16px #d7bd5d40;
+  color:#fff0bc;
+}
+
+/* ---------- 版面 ---------- */
+
+.mechanical-main{
+  width:min(1220px,calc(100% - 48px));
+  margin:0 auto;
+  padding:20px 0 26px;
+}
+.mechanical-topline{
+  display:flex;
+  justify-content:space-between;
+  gap:12px;
+  margin:0 4px 14px;
+  color:var(--text-label);
+  font-size:11px;
+  letter-spacing:2px;
+}
+.mechanical-lamp{letter-spacing:1px;color:#a8c3aa}
+.mechanical-lamp:before{
+  content:"";
+  display:inline-block;
+  width:7px;height:7px;
+  margin-right:8px;
+  border-radius:50%;
+  background:var(--signal-green);
+  box-shadow:0 0 10px #8bcd85;
+}
+.mechanical-lamp.is-busy:before{background:var(--signal-amber);box-shadow:0 0 13px var(--signal-amber)}
+.mechanical-layout{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 320px;
+  gap:20px;
+  align-items:start;
+}
+/* 栅格子项默认 min-width:auto，会被赔付表这类横向可滚动的内容撑宽整页。 */
+.mechanical-layout>*,.mechanical-console>*{min-width:0}
+
+/* ---------- 机柜：木纹外框 + 金色双线 ---------- */
+
+.mechanical-cabinet{
+  position:relative;
+  padding:9px;
+  border-radius:20px;
+  background:
+    repeating-conic-gradient(from 7deg,var(--wood) 0 7deg,var(--wood-dark) 7deg 14deg,var(--wood-light) 14deg 21deg);
+  box-shadow:
+    inset 0 0 0 3px #1a100b,
+    inset 0 0 0 7px var(--brass),
+    inset 0 0 0 9px #120b07,
+    0 22px 50px #000a;
+}
+.mechanical-cabinet:before{
+  content:"";
+  position:absolute;
+  inset:9px;
+  border-radius:12px;
+  background:linear-gradient(#0a150e,#060d09);
+  box-shadow:inset 0 0 0 1px var(--gold-deep),inset 0 0 40px #000c;
+  pointer-events:none;
+}
+.mechanical-cabinet>*{position:relative;z-index:1}
+
+/* 顶灯招牌 */
+.mechanical-marquee{
+  margin:4px 4px 0;
+  padding:13px 18px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:16px;
+  border:1px solid var(--gold-deep);
+  border-radius:10px 10px 0 0;
+  background:linear-gradient(100deg,#241d11,#463819 46%,#221c10);
+  box-shadow:inset 0 1px #ffe4a02e,0 3px 12px #0008;
+  color:#f0dda2;
+}
+.mechanical-marquee b{
+  font:700 16px var(--font-serif);
+  letter-spacing:5px;
+  text-shadow:0 0 14px #e7c76c66,0 1px 0 #000;
+  white-space:nowrap;
+}
+.mechanical-lamps{display:flex;gap:6px;flex:1;justify-content:center}
+.mechanical-lamps i{
+  width:7px;height:7px;
+  border-radius:50%;
+  background:#6e5c30;
+  box-shadow:inset 0 0 2px #000;
+  animation:marquee-chase 1.5s linear infinite;
+  animation-delay:calc(var(--lamp) * .1s);
+}
+@keyframes marquee-chase{
+  0%,72%{background:#6e5c30;box-shadow:inset 0 0 2px #000}
+  12%{background:#ffe9a8;box-shadow:0 0 9px #ffd873,0 0 3px #fff}
+}
+
+/* 画面：金色内框 + 玻璃压边 + 四角黄铜螺丝 */
+.mechanical-scene{
+  position:relative;
+  margin:0 4px;
+  border:1px solid var(--gold-deep);
+  border-block:0;
+  background:#020604;
+  box-shadow:inset 0 0 30px #000d;
+}
+.mechanical-scene canvas{display:block;width:100%;height:auto;aspect-ratio:6/5}
+.mechanical-scene:after{
+  content:"";
+  position:absolute;
+  inset:0;
+  pointer-events:none;
+  box-shadow:inset 0 0 0 1px #ffffff10,inset 0 14px 28px #0007;
+}
+.mechanical-screw{
+  position:absolute;
+  z-index:2;
+  width:11px;height:11px;
+  border-radius:50%;
+  background:radial-gradient(circle at 34% 30%,#f2dda2,#b08f4c 58%,#43330f);
+  box-shadow:0 1px 2px #000b,inset 0 0 0 1px #00000055;
+}
+.mechanical-screw:after{
+  content:"";
+  position:absolute;
+  left:2px;right:2px;top:calc(50% - 1px);
+  height:2px;
+  background:#2a2010;
+  transform:rotate(35deg);
+}
+.screw-tl{left:7px;top:7px}.screw-tr{right:7px;top:7px}
+.screw-bl{left:7px;bottom:7px}.screw-br{right:7px;bottom:7px}
+
+.mechanical-status{
+  min-height:62px;
+  margin:0 4px;
+  padding:14px 18px;
+  display:grid;
+  place-items:center;
+  border:1px solid var(--gold-deep);
+  background:linear-gradient(#08120b,#050a07);
+  box-shadow:inset 0 2px 12px #000a;
+  color:#e2d2a0;
+  font-size:14px;
+  line-height:1.65;
+  text-align:center;
+}
+/* 机柜铭牌 */
+.mechanical-plate{
+  margin:0 4px 4px;
+  padding:7px 18px;
+  display:flex;
+  justify-content:space-between;
+  gap:10px;
+  border:1px solid #4b3f22;
+  border-top:0;
+  border-radius:0 0 10px 10px;
+  background:linear-gradient(#1a160d,#0d0b06);
+  color:#8b7c4f;
+  font-size:9px;
+  letter-spacing:3px;
+}
+
+/* ---------- 控制台 ---------- */
+
+.mechanical-console{display:grid;gap:16px}
+.mechanical-console>*{
+  border:1px solid var(--panel-edge);
+  border-radius:12px;
+  background:var(--panel);
+  box-shadow:var(--shadow-panel);
+}
+.mechanical-console>.mechanical-meter{
+  padding:18px 22px;
+  background:linear-gradient(150deg,#1d2417,#080d08 72%);
+  border-color:#7c6941;
+}
+.mechanical-meter>span{
+  display:flex;
+  justify-content:space-between;
+  align-items:baseline;
+  gap:8px;
+  color:#bbb18d;
+  font-size:13px;
+}
+.mechanical-meter small{font-size:11px;color:#8c8467;letter-spacing:1px}
+.mechanical-meter output{
+  display:block;
+  margin-top:10px;
+  font:700 44px/1 var(--font-mono);
+  font-variant-numeric:tabular-nums;
+  color:var(--signal-amber);
+  text-shadow:0 0 18px #debd5977;
+  overflow-wrap:anywhere;
+}
+.mechanical-controls{display:grid;gap:14px;padding:18px}
+.mechanical-control-label{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  font-size:13px;
+  color:#c8c6ac;
+  letter-spacing:1px;
+}
+.mechanical-control-label output{color:#e6cc85;font-variant-numeric:tabular-nums}
+.mechanical-controls input[type=range]{
+  width:100%;
+  min-height:30px;
+  accent-color:var(--gold);
+  cursor:pointer;
+}
+.mechanical-control-ends{
+  display:flex;
+  justify-content:space-between;
+  margin-top:-10px;
+  font-size:11px;
+  color:#8d9a85;
+}
+.mechanical-controls p{margin:0;font-size:13px;line-height:1.7;color:#9dab96}
+.mechanical-options{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.mechanical-options button{padding:10px 3px}
+.mechanical-risk{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+
+/* 出币槽 */
+.mechanical-console>.mechanical-tray{padding:16px;background:linear-gradient(#1b170f,#080c07);border-color:#675733}
+.mechanical-tray>div:first-child{display:flex;justify-content:space-between;gap:10px;font-size:13px}
+.mechanical-tray small{display:block;margin-top:4px;color:#8f876a;font-size:11px;letter-spacing:1px}
+.mechanical-tray output{color:#e3c472;font-weight:700;font-variant-numeric:tabular-nums}
+.mechanical-tray-coins{
+  position:relative;
+  height:86px;
+  margin:12px 0;
+  border:1px solid #4b442b;
+  border-radius:7px;
+  background:linear-gradient(#050a06,#010302);
+  box-shadow:inset 0 14px 26px #000c,inset 0 0 0 1px #00000088;
+  overflow:hidden;
+}
+.mechanical-tray-coins>span{display:grid;place-items:center;height:100%;font-size:13px;color:#7e826a}
+.mechanical-tray-coins>img{
+  position:absolute;
+  bottom:calc(7px + var(--row) * 8px);
+  left:calc(9px + var(--col) * 25px);
+  width:36px;height:36px;
+  object-fit:contain;
+  transform:rotate(var(--turn));
+  filter:drop-shadow(0 3px 1px #000);
+}
+
+.mechanical-console>.mechanical-history{padding:14px 16px;font-size:13px;color:#899b85;background:#070e09}
+.mechanical-history>span{display:block;margin-bottom:9px;letter-spacing:2px;color:#7f8d7b}
+.mechanical-history [data-history]{display:flex;flex-wrap:wrap;gap:6px;line-height:1.7}
+.mechanical-history b{
+  display:inline-block;
+  padding:3px 9px;
+  border:1px solid #536344;
+  border-radius:5px;
+  background:#0d150f;
+  font:13px var(--font-mono);
+  color:#e6cf91;
+}
+.mechanical-history b.lost{border-color:#494235;color:#918c7b}
+.mechanical-console>.mechanical-wallet-hint{
+  margin:0;
+  padding:14px;
+  border-color:#80643a;
+  background:#3b2f1740;
+  color:#dcc38b;
+  font-size:13px;
+  line-height:1.7;
+}
+.mechanical-disclosure{margin:22px 0 0;text-align:center;color:#73786b;font-size:11px}
+
+/* ---------- 说明书 ---------- */
+
+.mechanical-manual{
+  width:min(620px,calc(100vw - 30px));
+  max-height:86vh;
+  padding:34px;
+  border:1px solid #9b8753;
+  border-radius:16px;
+  background:radial-gradient(circle at 50% 0,#16301f,#090f0b 68%);
+  color:#d8d0b0;
+  box-shadow:0 24px 90px #000;
+  font:14px/1.75 var(--font-mono);
+}
+.mechanical-manual::backdrop{background:#000c}
+.mechanical-manual>small{font-size:10px;letter-spacing:3px;color:#958967}
+.mechanical-manual h2{margin:7px 0 14px;color:#ead79b;font:700 30px var(--font-serif);letter-spacing:2px}
+.mechanical-manual p{margin:0 0 12px}
+.mechanical-manual b{color:#e9d69a}
+.mechanical-game .mechanical-manual .mechanical-close{
+  float:right;
+  width:42px;height:42px;
+  padding:0;
+  border-radius:50%;
+  font-size:22px;
+}
+.mechanical-understood{width:100%;margin-top:14px}
+
+/* ---------- 共用计量条（摇台能量 / 推球次数） ---------- */
+
+.mechanical-gauge{display:grid;gap:8px}
+.mechanical-gauge-bar{
+  height:10px;
+  border:1px solid #5c6b4c;
+  border-radius:99px;
+  background:#0a130c;
+  box-shadow:inset 0 1px 4px #000a;
+  overflow:hidden;
+}
+.mechanical-gauge-bar i{
+  display:block;
+  height:100%;width:0;
+  border-radius:99px;
+  background:linear-gradient(90deg,#7d8f4f,var(--gold-bright));
+  box-shadow:0 0 10px #d9bd6f66;
+  transition:width .18s linear;
+}
+.mechanical-gauge-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mechanical-gauge-row button{padding:10px 4px;font-size:13px}
+
+/* ---------- 响应式 ---------- */
+
+@media(max-width:980px){
+  .mechanical-main{width:calc(100% - 28px);padding-top:14px}
+  .mechanical-layout{grid-template-columns:minmax(0,1fr) 268px;gap:12px}
+  .mechanical-header{padding:10px 14px;gap:8px}
+  .mechanical-brand strong{font-size:21px;letter-spacing:3px}
+  .mechanical-console{gap:12px}
+  .mechanical-controls{padding:15px}
+  .mechanical-wallet{min-width:104px;padding:7px 10px}
+  .mechanical-marquee{padding:11px 12px;gap:10px}
+  .mechanical-marquee b{font-size:13px;letter-spacing:3px}
+  .mechanical-lamps i{width:6px;height:6px}
+}
+@media(max-width:680px){
+  .mechanical-header{grid-template-columns:auto 1fr auto auto;gap:8px}
+  .mechanical-brand{grid-column:2;grid-row:1;justify-self:center}
+  .mechanical-wallet{grid-row:2;grid-column:1/5;display:flex;align-items:center;justify-content:space-between;min-width:0}
+  .mechanical-back{grid-row:1;padding:8px 10px;font-size:12px}
+  .mechanical-back span{display:none}
+  .mechanical-sound{grid-column:3;grid-row:1}
+  .mechanical-help{grid-column:4;grid-row:1}
+  .mechanical-brand strong{font-size:19px;letter-spacing:2px}
+  .mechanical-brand small{font-size:9px;letter-spacing:1px}
+  .mechanical-lamps{display:none}
+  .mechanical-layout{grid-template-columns:1fr}
+  .mechanical-console{grid-template-columns:1fr 1fr;align-items:start}
+  .mechanical-controls{grid-column:1/3;grid-row:2;padding:15px;gap:12px}
+  .mechanical-meter{padding:15px;grid-column:1;grid-row:3}
+  .mechanical-meter>span{display:block}
+  .mechanical-meter small{display:block;margin-top:5px}
+  .mechanical-meter output{font-size:34px}
+  .mechanical-tray{grid-column:2;grid-row:3/5;padding:12px}
+  .mechanical-tray>div:first-child{flex-wrap:wrap}
+  .mechanical-tray-coins{height:70px}
+  .mechanical-tray-coins>img{width:30px;height:30px}
+  .mechanical-history{grid-column:1;grid-row:4}
+  .mechanical-wallet-hint{grid-column:1/3;grid-row:5}
+  .mechanical-status{min-height:52px;padding:10px 14px;font-size:13px}
+  .mechanical-plate{font-size:8px;letter-spacing:1px}
+  .mechanical-cabinet{padding:6px;border-radius:14px}
+  .mechanical-game .mechanical-collect{font-size:13px;padding:10px 6px}
+  .mechanical-manual{padding:26px 18px}
+}
+@media(prefers-reduced-motion:reduce){
+  .mechanical-game button{transition:none}
+  .mechanical-lamps i{animation:none;background:#c9ab5e}
+  .mechanical-gauge-bar i{transition:none}
+}

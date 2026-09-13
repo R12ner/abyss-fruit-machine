@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {createGame} from '../dist/js/core/game.mjs';
+import {createGame} from '../dist/js/games/fruit/rules.mjs';
 const none=()=>({type:null,indices:[]});
 const wealth=g=>{const s=g.snapshot();return s.wallet+s.staged+s.credit+s.payout+s.win};
 const g=createGame();

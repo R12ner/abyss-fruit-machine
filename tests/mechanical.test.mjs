@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import {
   PUSHER, ZONES, COIN_VALUE, createPusherState, startPusherRound, stepPusher, tiltPusher, rechargeTilt,
   isPusherIdle, zoneMultiplier, isSideExit, rollCoinKinds,
-} from '../dist/js/games/coin-pusher/model.mjs';
+} from '../dist/js/games/coin-pusher/rules.mjs';
 import {
   ROW_OPTIONS, RISK_KEYS, STAKES, PAYTABLES, GOLD_PEGS, ENERGY_GOAL, NUDGE_MAX, CHARGED_MULTIPLIER,
   paytable, slotProbabilities, pegCount, goldBonusTenths, plinkoGeometry, createPlinkoRound,
   restorePlinkoRound, nudgePlinkoRound, plinkoPosition, pathColumns, countGoldHits, baseReturn, longRunReturn,
-} from '../dist/js/games/plinko/model.mjs';
+} from '../dist/js/games/plinko/rules.mjs';
 
 /* ================= 弹珠机 ================= */
 

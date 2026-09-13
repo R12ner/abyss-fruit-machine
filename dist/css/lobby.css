@@ -1,0 +1,124 @@
+/* 赌场大厅：入口画面与游戏选择卡片。机台自身的样式在各自的 css 文件里。 */
+body.arcade-menu-open{overflow:hidden;background:#040605}
+body.arcade-menu-open>header,body.arcade-menu-open>main{display:none}
+#arcade-gateway[hidden]{display:none!important}
+.gateway-screen[hidden]{display:none}
+#arcade-gateway{position:fixed;z-index:800;inset:0;display:grid;place-items:center;overflow:auto;background:radial-gradient(circle at 50% 40%,#183429 0,#08120e 34%,#030504 78%);color:var(--casino-cream);font-family:"Courier New",monospace}
+.gateway-noise{position:fixed;inset:0;pointer-events:none;opacity:.2;background:repeating-linear-gradient(0deg,transparent 0 3px,#fff .5px 4px),radial-gradient(circle at 20% 20%,#d8c47c22,transparent 22%),radial-gradient(circle at 80% 80%,#711d2d33,transparent 26%);mix-blend-mode:screen}
+.gateway-screen{position:relative;z-index:1;width:min(100%,1060px);min-height:min(760px,100vh);padding:54px 28px;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.gateway-mark{width:86px;height:86px;display:grid;place-items:center;border:1px solid #dfc77e;border-radius:50%;color:#e2c978;font:48px Georgia,serif;box-shadow:0 0 0 8px #d4bd6b13,0 0 60px #d1b14d20}
+.gateway-kicker,.game-select-heading p{margin:24px 0 10px;color:#958862;font-size:13px;letter-spacing:4px}
+.gateway-screen h1{margin:0;color:#f0e4bb;font:700 clamp(52px,8vw,104px)/.95 Georgia,"Noto Serif SC",serif;letter-spacing:.12em;text-shadow:0 2px #000,0 0 35px #bc9d5040}
+.gateway-title-en{margin:12px 0 0;color:#b99b54;font:18px Georgia,serif;letter-spacing:10px}
+.hero-chips{position:relative;width:min(420px,80vw);height:112px;margin:18px 0 20px}
+.chip-art{display:block;width:72px;height:72px;background-repeat:no-repeat;background-size:contain;background-position:center;filter:drop-shadow(0 6px 5px #000a)}
+.hero-chip{position:absolute;left:50%;top:18px;width:94px;height:94px}
+.hero-chip-0{transform:translateX(-155%) rotate(-18deg)}
+.hero-chip-1{transform:translateX(-85%) rotate(-6deg)}
+.hero-chip-2{transform:translateX(-15%) rotate(7deg)}
+.hero-chip-3{transform:translateX(55%) rotate(19deg)}
+.gateway-enter{min-width:260px;padding:18px 34px;border:1px solid #e0c77e;background:linear-gradient(#d6bd72,#89702e);color:#17150e;box-shadow:0 5px 0 #3d3014,0 0 35px #c6a95122;font:700 17px "Noto Serif SC",Georgia,serif;letter-spacing:5px;cursor:pointer}
+.gateway-enter span{display:block;margin-top:4px;font:10px "Courier New",monospace;letter-spacing:4px}
+.gateway-enter:hover{filter:brightness(1.12)}
+.gateway-enter:active{transform:translateY(4px);box-shadow:0 1px 0 #3d3014}
+.gateway-disclaimer{margin:30px 0 0;color:#74786c;font-size:12px;letter-spacing:1px}
+.gateway-games{justify-content:flex-start}
+.gateway-back{align-self:flex-start;border:0;background:transparent;color:#a99d77;font:14px "Courier New",monospace;cursor:pointer}
+.game-select-heading h2{margin:0;color:#eadcaf;font:52px Georgia,"Noto Serif SC",serif;letter-spacing:8px}
+.game-cards{width:100%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px;margin-top:42px}
+.game-card{position:relative;min-height:390px;padding:32px;display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-end;overflow:hidden;border:1px solid #7e7656;background:#0a110e;color:#eee2b9;text-align:left;cursor:pointer;box-shadow:0 18px 45px #0008}
+.game-card::after{content:"";position:absolute;inset:8px;border:1px solid #a8955d38;pointer-events:none}
+.game-card:hover{border-color:#d8bd69;transform:translateY(-4px);box-shadow:0 24px 55px #000b,0 0 28px #c7ae5720}
+.machine-number{position:absolute;left:26px;top:24px;color:#9f966f;font-size:11px;letter-spacing:3px}
+.game-card strong{position:relative;z-index:2;font:32px Georgia,"Noto Serif SC",serif;letter-spacing:3px}
+.game-card small{position:relative;z-index:2;margin-top:8px;color:#8c907c;font-size:12px;letter-spacing:1px}
+.card-enter{position:relative;z-index:2;margin-top:25px;color:#d4bd70;font-size:13px;letter-spacing:2px}
+.fruit-card{background:radial-gradient(circle at 50% 30%,#273d1e,#0b110c 58%)}
+.roulette-card{background:radial-gradient(circle at 50% 32%,#3e1620,#10090b 58%)}
+.fruit-card-art{position:absolute;inset:58px 30px 130px;display:flex;align-items:center;justify-content:center;gap:7px}
+.fruit-card-art img{width:31%;max-height:150px;object-fit:contain;image-rendering:pixelated;filter:drop-shadow(0 13px 8px #000b)}
+.roulette-card-art{position:absolute;inset:65px 20px 130px}
+.roulette-card-art .card-chip{position:absolute;width:156px;height:156px;left:50%;top:50%}
+.roulette-card-art .card-chip:first-child{transform:translate(-80%,-54%) rotate(-17deg)}
+.roulette-card-art .card-chip:last-child{transform:translate(-20%,-42%) rotate(15deg)}
+.casino-switch{font-size:21px!important;color:#292818!important}
+@media(max-width:760px){.gateway-screen{min-height:100vh;padding:26px 16px}
+.gateway-mark{width:68px;height:68px;font-size:39px}
+.gateway-screen h1{font-size:48px}
+.gateway-title-en{font-size:14px;letter-spacing:6px}
+.game-cards{grid-template-columns:1fr;margin-top:24px}
+.game-card{min-height:260px}
+.fruit-card-art,.roulette-card-art{inset:44px 18px 94px}
+.roulette-card-art .card-chip{width:112px;height:112px}
+.game-card strong{font-size:26px}}
+@media(prefers-reduced-motion:reduce){.game-card:hover{transform:none}}
+.gateway-sell{position:absolute;right:28px;top:54px;padding:10px 14px;border:1px solid #8c7944;border-radius:18px;background:linear-gradient(#3b3220,#1c180f);color:#e8d391;font:700 12px "Courier New",monospace;cursor:pointer}
+@media(max-width:760px){.gateway-sell{right:16px;top:24px}}
+#arcade-gateway button{min-height:44px;border-radius:12px;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;transition:transform .1s ease,filter .18s ease,background .18s ease}
+#arcade-gateway button:active{transform:scale(.97)}
+#arcade-gateway button:focus-visible{outline:3px solid #0a84ff88;outline-offset:2px}
+
+/* ---- 机台卡片 ----
+ * 四张卡片统一用"游戏的招牌道具"当封面：水果机是水果，轮盘是筹码，
+ * 推币机是倾泻的硬币，弹珠机是落进钉阵的球——都是同一批渲染道具素材，
+ * 斜置、投影、压在暗色径向底上，四张卡的画风因此一致。
+ */
+#arcade-gateway .game-cards{gap:18px;margin-top:28px}
+#arcade-gateway .game-card{min-height:330px}
+.gateway-games{padding-bottom:40px}
+
+.card-coin{
+  position:absolute;
+  display:block;
+  background-repeat:no-repeat;
+  background-size:contain;
+  background-position:center;
+  filter:drop-shadow(0 12px 9px #000c);
+}
+
+/* 推币机：三枚硬币正从金色唇口倾泻下来 */
+.pusher-card{background:radial-gradient(ellipse at 50% 32%,#3e3420,#0f120b 66%)}
+.pusher-card-art{position:absolute;inset:58px 20px 132px}
+.pusher-card-art:before{
+  content:"";
+  position:absolute;
+  left:4%;right:4%;top:58%;
+  height:8px;
+  border-radius:4px;
+  background:linear-gradient(#f0d590,#8a6c32 55%,#251d10);
+  box-shadow:0 6px 18px #000b;
+}
+.pusher-card-art .card-coin{left:50%;top:50%}
+.pusher-card-art .coin-0{width:104px;height:104px;transform:translate(-148%,-88%) rotate(-19deg)}
+.pusher-card-art .coin-1{width:142px;height:142px;transform:translate(-52%,-52%) rotate(9deg)}
+.pusher-card-art .coin-2{width:96px;height:96px;transform:translate(58%,-94%) rotate(23deg)}
+
+/* 弹珠机：一颗球正落进金色钉阵 */
+.plinko-card{background:radial-gradient(ellipse at 50% 32%,#194b37,#09140e 66%)}
+.plinko-card-art{position:absolute;inset:48px 20px 140px}
+.plinko-card-pegs{
+  position:absolute;
+  inset:0;
+  width:100%;height:100%;
+  filter:drop-shadow(0 3px 2px #000a);
+}
+.plinko-card-art .card-coin{
+  left:50%;top:0;
+  width:96px;height:96px;
+  transform:translate(-86%,-20%) rotate(-13deg);
+}
+
+@media(min-width:1500px){
+  #arcade-gateway .gateway-games{width:min(1480px,100%)}
+  #arcade-gateway .game-cards{grid-template-columns:repeat(4,minmax(0,1fr))}
+  #arcade-gateway .game-card{padding:25px;min-height:365px}
+  #arcade-gateway .game-card strong{font-size:27px}
+  .pusher-card-art,.plinko-card-art{inset:66px 14px 138px}
+}
+@media(max-width:760px){
+  .pusher-card-art,.plinko-card-art{inset:44px 18px 96px}
+  .pusher-card-art .coin-0{width:76px;height:76px}
+  .pusher-card-art .coin-1{width:104px;height:104px}
+  .pusher-card-art .coin-2{width:70px;height:70px}
+  .plinko-card-art .card-coin{width:78px;height:78px}
+}

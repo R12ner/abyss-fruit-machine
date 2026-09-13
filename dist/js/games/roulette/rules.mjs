@@ -1,4 +1,4 @@
-import {DEALER_INTEL_TRUTH_CHANCES,DEALER_SAYINGS,dealerLieReveal} from '../games/roulette/dealer-dialogue.mjs';
+import {DEALER_INTEL_TRUTH_CHANCES,DEALER_SAYINGS,dealerLieReveal} from './dealer-dialogue.mjs';
 
 export {DEALER_INTEL_TRUTH_CHANCES,DEALER_SAYINGS,dealerLieReveal};
 
