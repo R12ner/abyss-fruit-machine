@@ -5,6 +5,8 @@
 - 在线游戏：https://abyss-fruit-arcade.omiku-9996.chatgpt.site
 - GitHub：https://github.com/R12ner/abyss-fruit-machine
 
+> ⚠️ **许可证 / License：** 本项目为专有软件。未经版权持有人事先书面许可，不得复制、修改、部署、发布、分发、商用或制作衍生作品。详见 [LICENSE](LICENSE)。第三方依赖和素材仍适用其各自的许可证。
+
 ## 工程结构
 
 ```text
