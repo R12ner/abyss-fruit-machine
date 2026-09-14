@@ -1,0 +1,3 @@
+把中文字体（思源黑体 / Noto Sans SC 的 .ttf 或 .otf）放这里，
+然后在 项目设置 → GUI → Theme → Custom Font 指过来。
+不加的话界面上的中文会全是方框。

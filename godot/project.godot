@@ -1,0 +1,32 @@
+; 赌徒人生 · Godot 工程
+; 用 Godot 4.3 或更新版本打开。渲染必须是 Forward+，Compatibility 没有 SSAO/SSIL。
+
+config_version=5
+
+[application]
+
+config/name="赌徒人生"
+config/description="桌面赌博模拟。显示器里跑的是深渊赌场的机台。"
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.3", "Forward Plus")
+
+[autoload]
+
+Wallet="*res://scripts/wallet.gd"
+
+[display]
+
+window/size/viewport_width=1600
+window/size/viewport_height=900
+window/stretch/mode="canvas_items"
+
+[rendering]
+
+renderer/rendering_method="forward_plus"
+anti_aliasing/quality/msaa_3d=2
+anti_aliasing/quality/screen_space_aa=1
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality=3
+
+[physics]
+
+common/enable_object_picking=true
